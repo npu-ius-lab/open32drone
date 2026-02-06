@@ -6,7 +6,7 @@
 
 <p align="center">
     <strong>全部开源 · 软硬件协同</strong><br/>
-    <strong>个人及教育用途完全免费 · 商业用途需经授权</strong>
+    <strong>个人及教育用途完全免费</strong>
 </p>
 
 <p align="center">
