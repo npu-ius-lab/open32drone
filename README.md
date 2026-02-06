@@ -6,7 +6,7 @@
 
 <p align="center">
     <strong>Fully Open Source · Hardware-Software Integration</strong><br/>
-    <strong>Free for Personal & Educational Use · Commercial Use Requires Authorization</strong>
+    <strong>Free for Personal & Educational Use</strong>
 </p>
 
 <p align="center">
