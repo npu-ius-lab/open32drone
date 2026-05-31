@@ -8,10 +8,21 @@
 
 extern float channelZero[16];
 extern float channelMax[16];
-extern float rollChannel, pitchChannel, throttleChannel, yawChannel, armedChannel, modeChannel;
-
-// 🟢 [新增 1] 定义全局变量
-float debugMode = 0; 
+extern float rollChannel, pitchChannel, throttleChannel, yawChannel, modeChannel;
+extern float hoverThrottle, altP, altI, altIMax, altVelP;
+extern float altStickDeadband, altClimbRateMax, altDescendRateMax;
+extern float positionHoldP, positionHoldMaxSpeed;
+extern float holdPX, holdIX, holdDX, holdPY, holdIY, holdDY;
+extern float holdIntegralLimit, maxFlowAngle, posHoldMinHeight, posStickDeadband;
+extern float yawUnlockThreshold, motorIdleThrust;
+extern float rollRateDAlpha, pitchRateDAlpha;
+extern float stabGroundTiltMax, stabGroundAttScale, stabGroundRateScale, stabGroundYawScale;
+extern float stabTakeoffHeight, stabTakeoffThrottleStart;
+extern float boardAlignPitch, boardAlignRoll;
+extern float flowGyroCompPitch, flowGyroCompRoll, flowVelocitySmoothing, flowInnovationLimit, flowTiltCosMin;
+extern float flowBiasAdapt, flowVelocityZeroDeadband, flowPositionZeroDeadband;
+extern float flowScaleX, flowScaleY, flowArmMinHeight, flowArmMinThrottle, flowStationaryGyro, flowStationaryVel;
+extern float imuRateAlpha;
 
 Preferences storage;
 
@@ -45,13 +56,64 @@ Parameter parameters[] = {
 	{"CTL_R_RATE_MAX", &maxRate.x},
 	{"CTL_Y_RATE_MAX", &maxRate.z},
 	{"CTL_TILT_MAX", &tiltMax},
+	{"CTL_R_D_A", &rollRateDAlpha},
+	{"CTL_P_D_A", &pitchRateDAlpha},
+	{"ALT_HOVER", &hoverThrottle},
+	{"ALT_P", &altP},
+	{"ALT_I", &altI},
+	{"ALT_I_MAX", &altIMax},
+	{"ALT_V_P", &altVelP},
+	{"ALT_ST_DB", &altStickDeadband},
+	{"ALT_V_UP", &altClimbRateMax},
+	{"ALT_V_DN", &altDescendRateMax},
+	{"POS_P", &positionHoldP},
+	{"POS_V_MAX", &positionHoldMaxSpeed},
+	{"HOLD_P_X", &holdPX},
+	{"HOLD_I_X", &holdIX},
+	{"HOLD_D_X", &holdDX},
+	{"HOLD_P_Y", &holdPY},
+	{"HOLD_I_Y", &holdIY},
+	{"HOLD_D_Y", &holdDY},
+	{"HOLD_I_MAX", &holdIntegralLimit},
+	{"HOLD_A_MAX", &maxFlowAngle},
+	{"POS_MIN_Z", &posHoldMinHeight},
+	{"POS_STICK_DB", &posStickDeadband},
+	{"YAW_UNLOCK", &yawUnlockThreshold},
+	{"MOTOR_IDLE", &motorIdleThrust},
+	{"STAB_GND_TL", &stabGroundTiltMax},
+	{"STAB_GND_AT", &stabGroundAttScale},
+	{"STAB_GND_RT", &stabGroundRateScale},
+	{"STAB_GND_YW", &stabGroundYawScale},
+	{"STAB_LIFT_H", &stabTakeoffHeight},
+	{"STAB_LIFT_T", &stabTakeoffThrottleStart},
 	// imu
+	{"IMU_ROT_ROLL", &imuRotation.x},
+	{"IMU_ROT_PITCH", &imuRotation.y},
+	{"IMU_ROT_YAW", &imuRotation.z},
 	{"IMU_ACC_BIAS_X", &accBias.x},
 	{"IMU_ACC_BIAS_Y", &accBias.y},
 	{"IMU_ACC_BIAS_Z", &accBias.z},
 	{"IMU_ACC_SCALE_X", &accScale.x},
 	{"IMU_ACC_SCALE_Y", &accScale.y},
 	{"IMU_ACC_SCALE_Z", &accScale.z},
+	// estimate
+	{"FLOW_B_PIT", &boardAlignPitch},
+	{"FLOW_B_ROL", &boardAlignRoll},
+	{"IMU_RATE_A", &imuRateAlpha},
+	{"FLOW_K_PIT", &flowGyroCompPitch},
+	{"FLOW_K_ROL", &flowGyroCompRoll},
+	{"FLOW_SMOOTH", &flowVelocitySmoothing},
+	{"FLOW_INNOV", &flowInnovationLimit},
+	{"FLOW_TILT_C", &flowTiltCosMin},
+	{"FLOW_SCL_X", &flowScaleX},
+	{"FLOW_SCL_Y", &flowScaleY},
+	{"FLOW_BIAS_A", &flowBiasAdapt},
+	{"FLOW_ZERO_D", &flowVelocityZeroDeadband},
+	{"FLOW_POS_D", &flowPositionZeroDeadband},
+	{"FLOW_ARM_Z", &flowArmMinHeight},
+	{"FLOW_ARM_T", &flowArmMinThrottle},
+	{"FLOW_ST_G", &flowStationaryGyro},
+	{"FLOW_ST_V", &flowStationaryVel},
 	// rc
 	{"RC_ZERO_0", &channelZero[0]},
 	{"RC_ZERO_1", &channelZero[1]},
@@ -74,18 +136,12 @@ Parameter parameters[] = {
 	{"RC_THROTTLE", &throttleChannel},
 	{"RC_YAW", &yawChannel},
 	{"RC_MODE", &modeChannel},
-	
-	// 🟢 [新增 2] 注册调试模式参数
-	{"DEBUG_MODE", &debugMode}
 };
 
 void setupParameters() {
 	storage.begin("flix", false);
 	// Read parameters from storage
 	for (auto &parameter : parameters) {
-		if (!storage.isKey(parameter.name)) {
-			storage.putFloat(parameter.name, *parameter.variable);
-		}
 		*parameter.variable = storage.getFloat(parameter.name, *parameter.variable);
 		parameter.value = *parameter.variable;
 	}

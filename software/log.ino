@@ -12,6 +12,11 @@
 
 Vector attitudeEuler;
 Vector attitudeTargetEuler;
+extern Vector position;
+extern Vector velocity;
+extern Vector rawWorldPos;
+extern Vector rawBodyVel;
+extern Vector flowCompBodyVel;
 
 struct LogEntry {
 	const char *name;
@@ -32,6 +37,18 @@ LogEntry logEntries[] = {
 	{"attitudeTarget.x", &attitudeTargetEuler.x},
 	{"attitudeTarget.y", &attitudeTargetEuler.y},
 	{"attitudeTarget.z", &attitudeTargetEuler.z},
+	{"position.x", &position.x},
+	{"position.y", &position.y},
+	{"position.z", &position.z},
+	{"velocity.x", &velocity.x},
+	{"velocity.y", &velocity.y},
+	{"velocity.z", &velocity.z},
+	{"rawFlowPos.x", &rawWorldPos.x},
+	{"rawFlowPos.y", &rawWorldPos.y},
+	{"rawBodyVel.x", &rawBodyVel.x},
+	{"rawBodyVel.y", &rawBodyVel.y},
+	{"flowCompVel.x", &flowCompBodyVel.x},
+	{"flowCompVel.y", &flowCompBodyVel.y},
 	{"thrustTarget", &thrustTarget}
 };
 

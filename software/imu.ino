@@ -9,147 +9,138 @@
 #include "lpf.h"
 #include "util.h"
 
-MPU9250 imu(SPI);
+// MPU9250 imu(SPI);
+MPU9250 imu(Wire);
+#define I2C_SDA 2
+#define I2C_SCL 43
 
-Vector accBias;
-Vector accScale(1, 1, 1);
+Vector imuRotation(PI, 0, -PI / 2); // imu orientation as Euler angles
+
+Vector gyro; // gyroscope output, rad/s
 Vector gyroBias;
 
+Vector acc; // accelerometer output, m/s/s
+Vector accBias;
+Vector accScale(1, 1, 1);
+
 void setupIMU() {
-	print("Setup IMU\n");
-  SPI.begin(7,5,6,4); // osrbot PIN_MAP SCL, ADO, SDA, NCS
-	imu.begin();
-	configureIMU();
+  print("Setup IMU\n");
+    // SPI.begin(6,4,5,3); // osrbot PIN_MAP SCL, ADO, SDA, NCS
+  // imu.begin();
 
-	// 零偏 (Bias)
-	// accBias.x = 0.1379045f;   
-	// accBias.y = 0.110111f;  
-// place two key
-// gyro bias: 0.023349 -0.018763 -0.000771
-// accel bias: 0.150883 0.114561 1.795112
-// accel scale: 0.997931 0.997285 1.008334
+  // Initialize I2C with custom pins
+  Wire.begin(I2C_SDA, I2C_SCL);
+  Wire.setClock(400000);  // Set I2C clock speed to 400kHz
+  for (int i = 0; i < 5; i++) {
+    if(imu.begin()) break;  
+    delay(100);
+  }
 
-// gyro bias: 0.022885 -0.015106 0.005141
-// accel bias: 0.224482 0.089976 1.787197
-// accel scale: 0.995996 0.995103 1.011737
-	accBias.x = 0.224482f;
-	accBias.y = 0.089976f;
-	accBias.z = 1.787197f;   
-	
-	// 比例 (Scale)
-	accScale.x = 0.995996f;  
-	accScale.y = 0.995103f;  
-	accScale.z = 1.011737f;  
+  configureIMU();
 }
 
 void configureIMU() {
-	imu.setAccelRange(imu.ACCEL_RANGE_4G);
-	imu.setGyroRange(imu.GYRO_RANGE_2000DPS);
-	imu.setDLPF(imu.DLPF_MAX);
-	imu.setRate(imu.RATE_1KHZ_APPROX);
-	imu.setupInterrupt();
+  imu.setAccelRange(imu.ACCEL_RANGE_4G);
+  imu.setGyroRange(imu.GYRO_RANGE_2000DPS);
+  imu.setDLPF(imu.DLPF_MAX);
+  imu.setRate(imu.RATE_1KHZ_APPROX);
+  imu.setupInterrupt();
 }
 
 void readIMU() {
-	imu.waitForData();
-	imu.getGyro(gyro.x, gyro.y, gyro.z);
-	imu.getAccel(acc.x, acc.y, acc.z);
-	calibrateGyroOnce();
-	// apply scale and bias
-	acc = (acc - accBias) / accScale;
-	gyro = gyro - gyroBias;
-	// rotate
-	rotateIMU(acc);
-	rotateIMU(gyro);
-}
-
-void rotateIMU(Vector& data) {
-	// Rotate from LFD to FLU
-	// NOTE: In case of using other IMU orientation, change this line:
-	data = Vector(data.y, data.x, -data.z);
-	// Axes orientation for various boards: https://github.com/okalachev/flixperiph#imu-axes-orientation
+  imu.waitForData();
+  imu.getGyro(gyro.x, gyro.y, gyro.z);
+  imu.getAccel(acc.x, acc.y, acc.z);
+  calibrateGyroOnce();
+  // apply scale and bias
+  acc = (acc - accBias) / accScale;
+  gyro = gyro - gyroBias;
+  // rotate to body frame
+  Quaternion rotation = Quaternion::fromEuler(imuRotation);
+  acc = Quaternion::rotateVector(acc, rotation.inversed());
+  gyro = Quaternion::rotateVector(gyro, rotation.inversed());
 }
 
 void calibrateGyroOnce() {
-	static Delay landedDelay(2);
-	if (!landedDelay.update(landed)) return; // calibrate only if definitely stationary
+  static Delay landedDelay(2);
+  if (!landedDelay.update(landed)) return; // calibrate only if definitely stationary
 
-	static LowPassFilter<Vector> gyroCalibrationFilter(0.001);
-	gyroBias = gyroCalibrationFilter.update(gyro);
+  static LowPassFilter<Vector> gyroBiasFilter(0.001);
+  gyroBias = gyroBiasFilter.update(gyro);
 }
 
 void calibrateAccel() {
-	print("Calibrating accelerometer\n");
-	imu.setAccelRange(imu.ACCEL_RANGE_2G); // the most sensitive mode
+  print("Calibrating accelerometer\n");
+  imu.setAccelRange(imu.ACCEL_RANGE_2G); // the most sensitive mode
 
-	print("1/6 Place level [8 sec]\n");
-	pause(8);
-	calibrateAccelOnce();
-	print("2/6 Place nose up [8 sec]\n");
-	pause(8);
-	calibrateAccelOnce();
-	print("3/6 Place nose down [8 sec]\n");
-	pause(8);
-	calibrateAccelOnce();
-	print("4/6 Place on right side [8 sec]\n");
-	pause(8);
-	calibrateAccelOnce();
-	print("5/6 Place on left side [8 sec]\n");
-	pause(8);
-	calibrateAccelOnce();
-	print("6/6 Place upside down [8 sec]\n");
-	pause(8);
-	calibrateAccelOnce();
+  print("1/6 Place level [8 sec]\n");
+  pause(8);
+  calibrateAccelOnce();
+  print("2/6 Place nose up [8 sec]\n");
+  pause(8);
+  calibrateAccelOnce();
+  print("3/6 Place nose down [8 sec]\n");
+  pause(8);
+  calibrateAccelOnce();
+  print("4/6 Place on right side [8 sec]\n");
+  pause(8);
+  calibrateAccelOnce();
+  print("5/6 Place on left side [8 sec]\n");
+  pause(8);
+  calibrateAccelOnce();
+  print("6/6 Place upside down [8 sec]\n");
+  pause(8);
+  calibrateAccelOnce();
 
-	printIMUCalibration();
-	print("✓ Calibration done!\n");
-	configureIMU();
+  printIMUCalibration();
+  print("✓ Calibration done!\n");
+  configureIMU();
 }
 
 void calibrateAccelOnce() {
-	const int samples = 1000;
-	static Vector accMax(-INFINITY, -INFINITY, -INFINITY);
-	static Vector accMin(INFINITY, INFINITY, INFINITY);
+  const int samples = 1000;
+  static Vector accMax(-INFINITY, -INFINITY, -INFINITY);
+  static Vector accMin(INFINITY, INFINITY, INFINITY);
 
-	// Compute the average of the accelerometer readings
-	acc = Vector(0, 0, 0);
-	for (int i = 0; i < samples; i++) {
-		imu.waitForData();
-		Vector sample;
-		imu.getAccel(sample.x, sample.y, sample.z);
-		acc = acc + sample;
-	}
-	acc = acc / samples;
+  // Compute the average of the accelerometer readings
+  acc = Vector(0, 0, 0);
+  for (int i = 0; i < samples; i++) {
+    imu.waitForData();
+    Vector sample;
+    imu.getAccel(sample.x, sample.y, sample.z);
+    acc = acc + sample;
+  }
+  acc = acc / samples;
 
-	// Update the maximum and minimum values
-	if (acc.x > accMax.x) accMax.x = acc.x;
-	if (acc.y > accMax.y) accMax.y = acc.y;
-	if (acc.z > accMax.z) accMax.z = acc.z;
-	if (acc.x < accMin.x) accMin.x = acc.x;
-	if (acc.y < accMin.y) accMin.y = acc.y;
-	if (acc.z < accMin.z) accMin.z = acc.z;
-	// Compute scale and bias
-	accScale = (accMax - accMin) / 2 / ONE_G;
-	accBias = (accMax + accMin) / 2;
+  // Update the maximum and minimum values
+  if (acc.x > accMax.x) accMax.x = acc.x;
+  if (acc.y > accMax.y) accMax.y = acc.y;
+  if (acc.z > accMax.z) accMax.z = acc.z;
+  if (acc.x < accMin.x) accMin.x = acc.x;
+  if (acc.y < accMin.y) accMin.y = acc.y;
+  if (acc.z < accMin.z) accMin.z = acc.z;
+  // Compute scale and bias
+  accScale = (accMax - accMin) / 2 / ONE_G;
+  accBias = (accMax + accMin) / 2;
 }
 
 void printIMUCalibration() {
-	print("gyro bias: %f %f %f\n", gyroBias.x, gyroBias.y, gyroBias.z);
-	print("accel bias: %f %f %f\n", accBias.x, accBias.y, accBias.z);
-	print("accel scale: %f %f %f\n", accScale.x, accScale.y, accScale.z);
+  print("gyro bias: %f %f %f\n", gyroBias.x, gyroBias.y, gyroBias.z);
+  print("accel bias: %f %f %f\n", accBias.x, accBias.y, accBias.z);
+  print("accel scale: %f %f %f\n", accScale.x, accScale.y, accScale.z);
 }
 
 void printIMUInfo() {
-	imu.status() ? print("status: ERROR %d\n", imu.status()) : print("status: OK\n");
-	print("model: %s\n", imu.getModel());
-	print("who am I: 0x%02X\n", imu.whoAmI());
-	print("rate: %.0f\n", loopRate);
-	print("gyro: %f %f %f\n", rates.x, rates.y, rates.z);
-	print("acc: %f %f %f\n", acc.x, acc.y, acc.z);
-	imu.waitForData();
-	Vector rawGyro, rawAcc;
-	imu.getGyro(rawGyro.x, rawGyro.y, rawGyro.z);
-	imu.getAccel(rawAcc.x, rawAcc.y, rawAcc.z);
-	print("raw gyro: %f %f %f\n", rawGyro.x, rawGyro.y, rawGyro.z);
-	print("raw acc: %f %f %f\n", rawAcc.x, rawAcc.y, rawAcc.z);
+  imu.status() ? print("status: ERROR %d\n", imu.status()) : print("status: OK\n");
+  print("model: %s\n", imu.getModel());
+  print("who am I: 0x%02X\n", imu.whoAmI());
+  print("rate: %.0f\n", loopRate);
+  print("gyro: %f %f %f\n", rates.x, rates.y, rates.z);
+  print("acc: %f %f %f\n", acc.x, acc.y, acc.z);
+  imu.waitForData();
+  Vector rawGyro, rawAcc;
+  imu.getGyro(rawGyro.x, rawGyro.y, rawGyro.z);
+  imu.getAccel(rawAcc.x, rawAcc.y, rawAcc.z);
+  print("raw gyro: %f %f %f\n", rawGyro.x, rawGyro.y, rawGyro.z);
+  print("raw acc: %f %f %f\n", rawAcc.x, rawAcc.y, rawAcc.z);
 }

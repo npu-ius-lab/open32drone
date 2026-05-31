@@ -6,7 +6,7 @@
 #define BLINK_PERIOD 500000
 
 #ifndef LED_BUILTIN
-#define LED_BUILTIN 48 // for ESP32 Dev Module
+#define LED_BUILTIN 21 // for ESP32 Dev Module
 #endif
 
 void setupLED() {

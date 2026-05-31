@@ -7,16 +7,18 @@
 #include "util.h"
 
 // osrbot PIN_MAP 
-#define MOTOR_0_PIN 11 // rear left
-#define MOTOR_1_PIN 10 // rear right
-#define MOTOR_2_PIN 13 // front right
-#define MOTOR_3_PIN 12 // front left
+#define MOTOR_0_PIN 4 // rear left
+#define MOTOR_1_PIN 3 // rear right
+#define MOTOR_2_PIN 6 // front right
+#define MOTOR_3_PIN 5  // front left
 
 #define PWM_FREQUENCY 10000
 #define PWM_RESOLUTION 10
 #define PWM_STOP 0
 #define PWM_MIN 0
 #define PWM_MAX 1000000 / PWM_FREQUENCY
+
+float motors[4]; // normalized motor thrusts in range [0..1]
 
 // Motors array indexes:
 const int MOTOR_REAR_LEFT = 0;

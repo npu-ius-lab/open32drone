@@ -83,5 +83,3 @@ public:
 		return t - start >= delay;
 	}
 };
-
-void print(const char* format, ...);

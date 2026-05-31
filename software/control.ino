@@ -1,572 +1,544 @@
 // Copyright (c) 2023 Oleg Kalachev <okalachev@gmail.com>
 // Repository: https://github.com/okalachev/flix
 
+// Flight control
+
 #include "vector.h"
 #include "quaternion.h"
 #include "pid.h"
 #include "lpf.h"
 #include "util.h"
-#include "kalman_angle.h"
 
-// ============================================================================
-//                               参数配置区域
-// ============================================================================
-
-// --- 1. 角速度环PID ---
-#define ROLLRATE_P 0.12f
-#define ROLLRATE_I 0.8f
-#define ROLLRATE_D 0.008f
-#define ROLLRATE_I_LIM 1.0f
-
-#define PITCHRATE_P ROLLRATE_P
-#define PITCHRATE_I ROLLRATE_I
-#define PITCHRATE_D ROLLRATE_D
-#define PITCHRATE_I_LIM ROLLRATE_I_LIM
-
-#define YAWRATE_P 0.3f
+#define PITCHRATE_P 0.06f
+#define PITCHRATE_I 0.0f
+#define PITCHRATE_D 0.004f
+#define PITCHRATE_I_LIM 0.03f
+#define ROLLRATE_P PITCHRATE_P
+#define ROLLRATE_I PITCHRATE_I
+#define ROLLRATE_D PITCHRATE_D
+#define ROLLRATE_I_LIM PITCHRATE_I_LIM
+#define YAWRATE_P 0.22f
 #define YAWRATE_I 0.0f
 #define YAWRATE_D 0.0f
 #define YAWRATE_I_LIM 0.3f
-
-// --- 2. 角度环PID ---
-#define ROLL_P 6.0f
-#define ROLL_I 0.0f
-#define ROLL_D 0.0f
-
+#define ROLL_P 3.2f
+#define ROLL_I 0
+#define ROLL_D 0
 #define PITCH_P ROLL_P
 #define PITCH_I ROLL_I
 #define PITCH_D ROLL_D
+#define YAW_P 2.2f
+#define PITCHRATE_MAX 0.70f
+#define ROLLRATE_MAX 0.70f
+#define YAWRATE_MAX radians(220)
+#define TILT_MAX radians(25)
+#define RATES_D_LPF_ALPHA 0.2f
 
-#define YAW_P 3.0f
+float hoverThrottle = 0.45f;
+float altP = 1.00f;
+float altI = 0.010f;
+float altIMax = 0.08f;
+float altVelP = 0.50f;
+float altStickDeadband = 0.08f;
+float altClimbRateMax = 0.60f;
+float altDescendRateMax = 0.50f;
 
-// --- 3. 最大速率限制 ---
-#define ROLLRATE_MAX radians(360)
-#define PITCHRATE_MAX radians(360)
-#define YAWRATE_MAX radians(300)
-#define TILT_MAX radians(30)
-#define RATES_D_LPF_ALPHA 0.2f 
+float positionHoldP = 0.25f;
+float positionHoldMaxSpeed = 0.12f;
+float holdPX = 0.015f;
+float holdIX = 0.006f;
+float holdDX = 0.0010f;
+float holdPY = 0.014f;
+float holdIY = 0.006f;
+float holdDY = 0.0010f;
+float holdIntegralLimit = 0.08f;
+float maxFlowAngle = 0.04f;
+float posHoldMinHeight = 0.22f;
+float posStickDeadband = 0.10f;
+float yawUnlockThreshold = 0.10f;
+float motorIdleThrust = 0.015f;
 
-// --- 4. 定高参数 ---
-#define ALT_P 0.5f          // 高度误差 P
-#define ALT_I 0.02f         // 高度积分 I (补油门)
-#define ALT_I_MAX 0.15f     // 积分限幅
-#define ALT_VEL_P 0.9f      // 垂直速度阻尼 (D项)
-#define HOVER_THROTTLE 0.60f // 基础悬停油门
+float rollRateDAlpha = 0.10f;
+float pitchRateDAlpha = 0.10f;
+float stabGroundYawScale = 0.50f;
+float stabGroundTiltMax = radians(8.0f);
+float stabTakeoffHeight = 0.18f;
+float stabTakeoffThrottleStart = 0.12f;
+float stabGroundAttScale = 0.45f;
+float stabGroundRateScale = 0.60f;
 
-// --- 5. 光流定点参数 ---
-// X轴 (前后/Pitch)
-#define POS_HOLD_P_X 0.045f
-#define POS_HOLD_I_X 0.050f
-#define POS_HOLD_D_X 0.000f
-#define POS_HOLD_TRIM_X 0.0f  // 物理重心修正
-
-// Y轴 (左右/Roll)
-#define POS_HOLD_P_Y 0.030f
-#define POS_HOLD_I_Y 0.040f
-#define POS_HOLD_D_Y 0.000f
-#define POS_HOLD_TRIM_Y 0.0f  // 物理重心修正
-
-// 通用定点参数
-#define POS_HOLD_I_LIMIT 1.0f  // 速度环积分限幅
-#define MAX_FLOW_ANGLE 0.2f    // 最大光流修正倾角 (约11度)
-#define POS_HOLD_DEADBAND 0.05f // 速度死区 (m/s)
-
-// ============================================================================
-//                               全局变量定义
-// ============================================================================
-
-// 飞行模式
-const int MANUAL = 0;
-const int ACRO = 1;
-const int STAB = 2;
-const int AUTO = 3;
-const int ALT_HOLD = 4;
-const int POS_HOLD = 5;
-
+const int RAW = 0, MANUAL = 0, ACRO = 1, STAB = 2, AUTO = 3, ALT_HOLD = 4, POS_HOLD = 5;
 int mode = STAB;
 bool armed = false;
 
-// 状态变量
-float targetZ = 0;
-bool altHoldEngaged = false;
-bool posHoldLocked = false;
-float targetPosX = 0;
-float targetPosY = 0;
-float velIntegralX = 0;
-float velIntegralY = 0;
-
-// 控制目标
-Quaternion attitudeTarget;
-Vector ratesTarget;
-Vector ratesExtra; 
-Vector torqueTarget;
-float thrustTarget;
-
-// PID 对象实例化
 PID rollRatePID(ROLLRATE_P, ROLLRATE_I, ROLLRATE_D, ROLLRATE_I_LIM, RATES_D_LPF_ALPHA);
 PID pitchRatePID(PITCHRATE_P, PITCHRATE_I, PITCHRATE_D, PITCHRATE_I_LIM, RATES_D_LPF_ALPHA);
-PID yawRatePID(YAWRATE_P, YAWRATE_I, YAWRATE_D);
+PID yawRatePID(YAWRATE_P, YAWRATE_I, YAWRATE_D, YAWRATE_I_LIM);
 PID rollPID(ROLL_P, ROLL_I, ROLL_D);
 PID pitchPID(PITCH_P, PITCH_I, PITCH_D);
 PID yawPID(YAW_P, 0, 0);
-
 Vector maxRate(ROLLRATE_MAX, PITCHRATE_MAX, YAWRATE_MAX);
 float tiltMax = TILT_MAX;
 
-float targetVelBodyX_debug = 0;
-float targetVelBodyY_debug = 0;
-float pos_hold_d_term_x_debug = 0; 
-float pos_hold_d_term_y_debug = 0;
+Quaternion attitudeTarget;
+Vector ratesTarget;
+Vector ratesExtra;
+Vector torqueTarget;
+float thrustTarget;
 
-// 外部引用
 extern const int MOTOR_REAR_LEFT, MOTOR_REAR_RIGHT, MOTOR_FRONT_RIGHT, MOTOR_FRONT_LEFT;
 extern float controlRoll, controlPitch, controlThrottle, controlYaw, controlMode;
 extern Quaternion attitude;
 extern Vector rates;
-extern float t, dt;
+extern float t;
 extern float motors[4];
-extern Vector velocity;   
-extern Vector position; 
+extern Vector velocity;
+extern Vector position;
 extern bool opticalFlowHealthy;
-extern KalmanAngle kalmanRoll, kalmanPitch; 
-extern float debugMode; 
+extern bool landed;
+extern bool flowCtrlUsingFlow;
+extern bool flowAirborne;
 
-// 调试函数引用
-extern void sendDebugVect(const char* name, float x, float y, float z);
-void print(const char* format, ...);
+void controlAttitude();
+void controlRates();
+void controlTorque();
 
-// ============================================================================
-//                               核心控制逻辑
-// ============================================================================
+float targetZ = 0.0f;
+bool altHoldEngaged = false;
+bool posHoldLocked = false;
+bool posHoldGateOpen = false;
+float targetPosX = 0.0f;
+float targetPosY = 0.0f;
+float altClimbRateTarget = 0.0f;
+float currentTiltLimitDebug = TILT_MAX;
+float currentStabAttScaleDebug = 1.0f;
+float currentStabRateScaleDebug = 1.0f;
+float currentStabYawScaleDebug = 1.0f;
+
+const int TAKEOFF_GROUND = 0;
+const int TAKEOFF_LIFTOFF = 1;
+const int TAKEOFF_AIRBORNE = 2;
+int takeoffState = TAKEOFF_GROUND;
+
+static float altIntegral = 0.0f;
+static float velIntegralX = 0.0f;
+static float velIntegralY = 0.0f;
+static float lastVelErrorX = 0.0f;
+static float lastVelErrorY = 0.0f;
+static uint32_t lastFlowGoodTime = 0;
+static float manualRollCmd = 0.0f;
+static float manualPitchCmd = 0.0f;
+static float posRollCmd = 0.0f;
+static float posPitchCmd = 0.0f;
+static bool usePosCmd = false;
+
+bool autoTakeoffActive = false;
+bool autoTakeoffComplete = false;
+
+const char* getTakeoffStateName() {
+	if (takeoffState == TAKEOFF_GROUND) return "GROUND";
+	if (takeoffState == TAKEOFF_LIFTOFF) return "LIFTOFF";
+	if (takeoffState == TAKEOFF_AIRBORNE) return "AIRBORNE";
+	return "UNKNOWN";
+}
+
+void resetControlPIDs() {
+	rollRatePID.reset();
+	pitchRatePID.reset();
+	yawRatePID.reset();
+	rollPID.reset();
+	pitchPID.reset();
+	yawPID.reset();
+}
+
+void resetAttitudeCommandState() {
+	manualRollCmd = 0.0f;
+	manualPitchCmd = 0.0f;
+	posRollCmd = 0.0f;
+	posPitchCmd = 0.0f;
+	usePosCmd = false;
+	ratesExtra = Vector(0, 0, 0);
+}
+
+void clearHorizontalHoldState() {
+	velIntegralX = 0.0f;
+	velIntegralY = 0.0f;
+	lastVelErrorX = 0.0f;
+	lastVelErrorY = 0.0f;
+	targetPosX = position.x;
+	targetPosY = position.y;
+	posHoldLocked = false;
+	posHoldGateOpen = false;
+	posRollCmd = 0.0f;
+	posPitchCmd = 0.0f;
+	usePosCmd = false;
+}
+
+void clearAltitudeHoldState() {
+	altHoldEngaged = false;
+	altIntegral = 0.0f;
+	targetZ = position.z;
+	altClimbRateTarget = 0.0f;
+	autoTakeoffActive = false;
+	autoTakeoffComplete = false;
+}
+
+void resetControlStateOnDisarm() {
+	clearAltitudeHoldState();
+	clearHorizontalHoldState();
+	resetAttitudeCommandState();
+	resetControlPIDs();
+	thrustTarget = 0.0f;
+	ratesTarget = Vector(0, 0, 0);
+	torqueTarget = Vector(0, 0, 0);
+	takeoffState = TAKEOFF_GROUND;
+}
+
+void updateModeAndArmState() {
+	if (valid(controlMode) && mode != RAW && mode != ACRO && mode != AUTO) {
+		if (controlMode < 0.33f) mode = STAB;
+		else if (controlMode < 0.66f) mode = ALT_HOLD;
+		else mode = POS_HOLD;
+	}
+
+	bool armCommand = controlThrottle < 0.05f && controlYaw > 0.95f;
+	bool disarmCommand = controlThrottle < 0.05f && controlYaw < -0.95f;
+
+	if (armCommand && !armed) {
+		armed = true;
+		resetControlPIDs();
+		resetAttitudeCommandState();
+		ratesTarget = Vector(0, 0, 0);
+		torqueTarget = Vector(0, 0, 0);
+		thrustTarget = motorIdleThrust;
+	}
+	if (disarmCommand && armed) {
+		armed = false;
+		resetControlStateOnDisarm();
+	}
+}
+
+void updateTakeoffState() {
+	if (!armed) {
+		takeoffState = TAKEOFF_GROUND;
+		return;
+	}
+
+	static Delay liftoffDelay(0.06f);
+	static Delay airborneDelay(0.10f);
+	bool throttleActive = controlThrottle > stabTakeoffThrottleStart || thrustTarget > stabTakeoffThrottleStart;
+	bool heightLifted = position.z > max(0.04f, stabTakeoffHeight * 0.25f);
+	bool heightAirborne = position.z > max(0.08f, stabTakeoffHeight * 0.60f);
+	bool verticalLifted = abs(velocity.z) > 0.08f;
+
+	if (airborneDelay.update(heightAirborne)) takeoffState = TAKEOFF_AIRBORNE;
+	else if ((throttleActive && (heightLifted || verticalLifted)) || liftoffDelay.update(heightLifted)) takeoffState = TAKEOFF_LIFTOFF;
+	else takeoffState = TAKEOFF_GROUND;
+}
+
+float getStabAirBlend() {
+	if (!armed || mode == ACRO) return 1.0f;
+	if (takeoffState == TAKEOFF_GROUND) return 0.0f;
+	if (takeoffState == TAKEOFF_AIRBORNE) return 1.0f;
+
+	float throttleBlend = constrain(mapf(controlThrottle, stabTakeoffThrottleStart, hoverThrottle, 0.0f, 1.0f), 0.0f, 1.0f);
+	float heightBlend = constrain(position.z / stabTakeoffHeight, 0.0f, 1.0f);
+	return max(throttleBlend, heightBlend);
+}
+
+float getStabTiltLimitNow() {
+	float airBlend = getStabAirBlend();
+	currentTiltLimitDebug = stabGroundTiltMax + (tiltMax - stabGroundTiltMax) * airBlend;
+	return currentTiltLimitDebug;
+}
+
+float getStabAttitudeScale() {
+	float airBlend = getStabAirBlend();
+	currentStabAttScaleDebug = stabGroundAttScale + (1.0f - stabGroundAttScale) * airBlend;
+	return currentStabAttScaleDebug;
+}
+
+float getStabRateScale() {
+	float airBlend = getStabAirBlend();
+	currentStabRateScaleDebug = stabGroundRateScale + (1.0f - stabGroundRateScale) * airBlend;
+	return currentStabRateScaleDebug;
+}
+
+float getStabYawScale() {
+	float airBlend = getStabAirBlend();
+	currentStabYawScaleDebug = stabGroundYawScale + (1.0f - stabGroundYawScale) * airBlend;
+	return currentStabYawScaleDebug;
+}
+
+void updateFinalAttitudeTarget() {
+	bool yawActive = abs(controlYaw) > yawUnlockThreshold;
+	bool stickMoving = abs(controlRoll) > posStickDeadband || abs(controlPitch) > posStickDeadband;
+	float finalRoll = manualRollCmd;
+	float finalPitch = manualPitchCmd;
+
+	if (mode == POS_HOLD && posHoldGateOpen && usePosCmd && !stickMoving) {
+		finalRoll = posRollCmd;
+		finalPitch = posPitchCmd;
+	}
+
+	float yawTarget = attitudeTarget.getYaw();
+	if (invalid(yawTarget) || yawActive) yawTarget = attitude.getYaw();
+	attitudeTarget = Quaternion::fromEuler(Vector(finalRoll, finalPitch, yawTarget));
+	ratesExtra = Vector(0, 0, -controlYaw * maxRate.z);
+}
+
+void updatePilotControlSplit() {
+	updateModeAndArmState();
+
+	if (!armed) {
+		resetControlStateOnDisarm();
+		return;
+	}
+	if (mode == AUTO) return;
+
+	if (mode == ACRO || mode == RAW) {
+		thrustTarget = controlThrottle;
+		attitudeTarget.invalidate();
+		clearAltitudeHoldState();
+		clearHorizontalHoldState();
+		if (mode == ACRO) {
+			ratesTarget.x = controlRoll * maxRate.x;
+			ratesTarget.y = controlPitch * maxRate.y;
+			ratesTarget.z = -controlYaw * maxRate.z;
+		} else {
+			ratesTarget.invalidate();
+			torqueTarget = Vector(controlRoll, controlPitch, -controlYaw) * 0.1f;
+		}
+		updateTakeoffState();
+		return;
+	}
+
+	if (mode == STAB) {
+		thrustTarget = controlThrottle;
+		clearAltitudeHoldState();
+		clearHorizontalHoldState();
+	}
+
+	updateTakeoffState();
+	float currentTiltLimit = getStabTiltLimitNow();
+	manualRollCmd = controlRoll * currentTiltLimit;
+	manualPitchCmd = controlPitch * currentTiltLimit;
+	updateFinalAttitudeTarget();
+}
+
+void updateAltitudeControlSplit(float controlDt) {
+	if (!armed || mode == AUTO || (mode != ALT_HOLD && mode != POS_HOLD)) return;
+
+	if (!altHoldEngaged) {
+		targetZ = position.z;
+		altHoldEngaged = true;
+		altIntegral = 0.0f;
+	}
+
+	if (controlThrottle < 0.05f && position.z < 0.08f) {
+		altClimbRateTarget = 0.0f;
+		altIntegral = 0.0f;
+		targetZ = position.z;
+		thrustTarget = motorIdleThrust;
+		return;
+	}
+
+	float stick = controlThrottle - 0.5f;
+	if (abs(stick) <= altStickDeadband) {
+		altClimbRateTarget = 0.0f;
+	} else if (stick > 0.0f) {
+		altClimbRateTarget = mapf(controlThrottle, 0.5f + altStickDeadband, 1.0f, 0.0f, altClimbRateMax);
+	} else {
+		altClimbRateTarget = -mapf(controlThrottle, 0.5f - altStickDeadband, 0.0f, 0.0f, altDescendRateMax);
+	}
+
+	altClimbRateTarget = constrain(altClimbRateTarget, -altDescendRateMax, altClimbRateMax);
+	targetZ = constrain(targetZ + altClimbRateTarget * controlDt, 0.0f, 3.5f);
+
+	float altError = targetZ - position.z;
+	altIntegral = constrain(altIntegral + altError * controlDt * altI, -altIMax, altIMax);
+	if (position.z < 0.10f) altIntegral = 0.0f;
+
+	float altCorrection = constrain(altError * altP, -0.25f, 0.25f);
+	float velCorrection = constrain(velocity.z * altVelP, -0.20f, 0.20f);
+	thrustTarget = constrain(hoverThrottle + altIntegral + altCorrection - velCorrection, motorIdleThrust, 0.90f);
+	autoTakeoffActive = altClimbRateTarget > 0.0f && position.z < targetZ - 0.05f;
+	autoTakeoffComplete = altHoldEngaged && !autoTakeoffActive;
+}
+
+void updatePositionControlSplit(float controlDt) {
+	static Delay posGateDelay(0.30f);
+
+	if (!armed || mode != POS_HOLD) {
+		posGateDelay.update(false);
+		clearHorizontalHoldState();
+		return;
+	}
+
+	uint32_t now = millis();
+	if (opticalFlowHealthy) lastFlowGoodTime = now;
+	bool flowIsStable = lastFlowGoodTime != 0 && now - lastFlowGoodTime < 150;
+	bool yawActive = abs(controlYaw) > yawUnlockThreshold;
+	bool stickMoving = abs(controlRoll) > posStickDeadband || abs(controlPitch) > posStickDeadband;
+	bool safeAltitude = position.z > posHoldMinHeight;
+	bool levelEnough = abs(attitude.getRoll()) < radians(12.0f) && abs(attitude.getPitch()) < radians(12.0f);
+	bool gateCandidate = altHoldEngaged && flowCtrlUsingFlow && flowAirborne && flowIsStable && safeAltitude && levelEnough;
+	posHoldGateOpen = posGateDelay.update(gateCandidate);
+
+	if (!posHoldGateOpen || stickMoving || yawActive) {
+		clearHorizontalHoldState();
+		updateFinalAttitudeTarget();
+		return;
+	}
+
+	if (!posHoldLocked) {
+		targetPosX = position.x;
+		targetPosY = position.y;
+		velIntegralX = 0.0f;
+		velIntegralY = 0.0f;
+		posHoldLocked = true;
+	}
+
+	float errX = targetPosX - position.x;
+	float errY = targetPosY - position.y;
+	float vWorldX = constrain(errX * positionHoldP, -positionHoldMaxSpeed, positionHoldMaxSpeed);
+	float vWorldY = constrain(errY * positionHoldP, -positionHoldMaxSpeed, positionHoldMaxSpeed);
+
+	float yaw = attitude.getYaw();
+	float c = cos(yaw);
+	float s = sin(yaw);
+	float targetVelBodyX = vWorldX * c + vWorldY * s;
+	float targetVelBodyY = -vWorldX * s + vWorldY * c;
+
+	float velErrorX = targetVelBodyX - velocity.x;
+	float velErrorY = targetVelBodyY - velocity.y;
+	float dTermX = 0.0f;
+	float dTermY = 0.0f;
+	if (controlDt > 0.0f && controlDt < 0.2f) {
+		dTermX = (velErrorX - lastVelErrorX) / controlDt * holdDX;
+		dTermY = (velErrorY - lastVelErrorY) / controlDt * holdDY;
+	}
+	lastVelErrorX = velErrorX;
+	lastVelErrorY = velErrorY;
+
+	if (abs(velErrorX) > 0.04f) {
+		velIntegralX = constrain(velIntegralX + velErrorX * controlDt * holdIX, -holdIntegralLimit, holdIntegralLimit);
+	}
+	if (abs(velErrorY) > 0.04f) {
+		velIntegralY = constrain(velIntegralY + velErrorY * controlDt * holdIY, -holdIntegralLimit, holdIntegralLimit);
+	}
+
+	posPitchCmd = constrain(velErrorX * holdPX + velIntegralX + dTermX, -maxFlowAngle, maxFlowAngle);
+	posRollCmd = constrain(velErrorY * holdPY + velIntegralY + dTermY, -maxFlowAngle, maxFlowAngle);
+	usePosCmd = true;
+	updateFinalAttitudeTarget();
+}
+
+void controlPilotLoop() {
+	static float lastPilotLoopTime = NAN;
+	float controlDt = valid(lastPilotLoopTime) ? t - lastPilotLoopTime : 0.0f;
+	lastPilotLoopTime = t;
+	if (!(controlDt > 0.0f) || controlDt > 0.2f) controlDt = 1.0f / 80.0f;
+
+	updatePilotControlSplit();
+	updateAltitudeControlSplit(controlDt);
+	failsafe();
+}
+
+void controlPositionLoop() {
+	static float lastPositionLoopTime = NAN;
+	float controlDt = valid(lastPositionLoopTime) ? t - lastPositionLoopTime : 0.0f;
+	lastPositionLoopTime = t;
+	if (!(controlDt > 0.0f) || controlDt > 0.2f) controlDt = 1.0f / 40.0f;
+
+	updatePositionControlSplit(controlDt);
+}
+
+void controlAttitudeLoop() {
+	if (mode != ACRO && mode != RAW) controlAttitude();
+}
+
+void controlRateTorqueLoop() {
+	controlRates();
+	controlTorque();
+}
 
 void control() {
-    // 1. 更新飞行模式与解锁状态
-    updateFlightMode();
+	static Rate pilotRate(80);
+	static Rate positionRate(40);
+	static Rate attitudeRate(150);
+	static Rate innerRate(400);
 
-    // 2. 计算目标推力和姿态
-    if (mode == ACRO) {
-        runAcroControl();
-    } else {
-        runLevelControl();
-    }
-
-    // 3. 姿态控制 (Angle Loop)
-    if (mode != ACRO) {
-        controlAttitude();
-    }
-
-    // 4. 角速度控制 (Rate Loop)
-    controlRates();
-
-    // 5. 电机输出 (Mixer)
-    controlTorque();
-
-    // 6. 调试输出
-    debugControl();
+	if (pilotRate) controlPilotLoop();
+	if (positionRate) controlPositionLoop();
+	if (attitudeRate) controlAttitudeLoop();
+	if (innerRate) controlRateTorqueLoop();
 }
 
-// ----------------------------------------------------------------------------
-// 模式与状态管理
-// ----------------------------------------------------------------------------
-void updateFlightMode() {
-    // 映射通道到模式
-    if (controlMode < 0.33f) mode = STAB;
-    else if (controlMode < 0.66f) mode = ALT_HOLD;
-    else mode = POS_HOLD;
-
-    // 解锁/上锁逻辑 (内八/外八或特定摇杆位)
-    if (controlThrottle < 0.05f) {
-        if (controlYaw > 0.95f) armed = true;
-        if (controlYaw < -0.95f) armed = false;
-    }
-
-    // 状态重置
-    if (!armed) {
-        altHoldEngaged = false; 
-        posHoldLocked = false;
-        thrustTarget = 0;
-        
-        // 重置所有积分器
-        velIntegralX = 0; velIntegralY = 0;
-        rollRatePID.reset(); pitchRatePID.reset(); yawRatePID.reset();
-        rollPID.reset(); pitchPID.reset();
-        
-        // 重置目标高度
-        targetZ = 0;
-    }
-}
-
-// ----------------------------------------------------------------------------
-// ACRO (特技) 模式控制
-// ----------------------------------------------------------------------------
-void runAcroControl() {
-    thrustTarget = controlThrottle;
-    ratesTarget.x = controlRoll * maxRate.x;
-    ratesTarget.y = controlPitch * maxRate.y;
-    ratesTarget.z = controlYaw * maxRate.z;
-
-    // 清除辅助模式状态
-    altHoldEngaged = false;
-    posHoldLocked = false;
-    velIntegralX = 0;
-    velIntegralY = 0;
-}
-
-// ----------------------------------------------------------------------------
-// 自稳/定高/定点 模式主逻辑
-// ----------------------------------------------------------------------------
-void runLevelControl() {
-    // A. 处理油门与高度
-    if (mode == STAB) {
-        // 自稳模式：直通油门
-        thrustTarget = controlThrottle;
-        altHoldEngaged = false;
-        targetZ = position.z;
-    } else {
-        // 定高/定点模式：高度保持
-        runAltitudeHold();
-    }
-
-    // B. 处理水平位置 (定点 vs 手动)
-    if (mode == POS_HOLD && opticalFlowHealthy && position.z > 0.4f) {
-        runPositionHoldControl();
-    } else {
-        // 普通自稳逻辑 (或盲飞保护)
-        runManualLevelControl();
-    }
-}
-
-// ----------------------------------------------------------------------------
-// 定高逻辑 
-// ----------------------------------------------------------------------------
-void runAltitudeHold() {
-    static float altIntegral = 0;
-    float deadband_low = 0.20f, deadband_high = 0.80f;
-
-    // 1. 激活检测
-    if (!altHoldEngaged) { 
-        if (controlThrottle > deadband_low) { 
-            altHoldEngaged = true;
-            targetZ = max(0.7f, position.z); // 初始锁定高度至少0.7m
-        } else { 
-            thrustTarget = 0;
-            return;
-        }
-    }
-
-    // 2. 更新目标高度
-    if (controlThrottle > deadband_high) {
-        targetZ += 0.8f * dt; // 上升
-    } else if (controlThrottle < deadband_low) {
-        if (controlThrottle < 0.05f) { 
-            // 落地逻辑：接近地面时减慢下降
-            targetZ -= (position.z < 0.30f) ? 0.20f * dt : 0.9f * dt;
-        } else {
-            targetZ -= 0.6f * dt; // 正常下降
-        }
-    }
-    targetZ = constrain(targetZ, -0.2f, 3.5f);
-
-    // 3. 高度 PID 控制
-    if (thrustTarget > 0.001f || controlThrottle > 0.05f) {
-        float altError = targetZ - position.z;
-        
-        // I项：补偿电池电压下降
-        altIntegral = constrain(altIntegral + altError * dt * ALT_I, -ALT_I_MAX, ALT_I_MAX);
-        if (position.z < 0.1f) altIntegral = 0; // 落地清积分
-
-        // 输出混控
-        thrustTarget = HOVER_THROTTLE 
-                       + altIntegral 
-                       + constrain(altError * ALT_P, -0.35f, 0.35f) 
-                       - constrain(velocity.z * ALT_VEL_P, -0.2f, 0.2f);
-                       
-        thrustTarget = constrain(thrustTarget, 0.0f, 0.9f);
-    }
-}
-
-// ----------------------------------------------------------------------------
-// 光流定点逻辑
-// ----------------------------------------------------------------------------
-void runPositionHoldControl() {
-    static float lastVelErrorX = 0;
-    static float lastVelErrorY = 0;
-    static uint32_t lastFlowGoodTime = 0;
-
-    if (opticalFlowHealthy) lastFlowGoodTime = millis();
-    bool flowIsStable = (millis() - lastFlowGoodTime < 300);
-
-    // 1. 摇杆介入检测 (手动飞行优先)
-    bool is_stick_moving = abs(controlRoll) > 0.05f || abs(controlPitch) > 0.05f;
-
-    if (is_stick_moving || !flowIsStable) {
-        posHoldLocked = false;
-        // 动杆时清空 PID 状态
-        velIntegralX = 0; 
-        velIntegralY = 0;
-        lastVelErrorX = 0; 
-        lastVelErrorY = 0;
-        
-        // 切换回纯姿态控制
-        runManualLevelControl();
-        return;
-    }
-
-    // 2. 锁定位置
-    if (!posHoldLocked) { 
-        targetPosX = position.x;
-        targetPosY = position.y; 
-        posHoldLocked = true;
-    }
-
-    // 3. 位置环 -> 速度目标
-    float errX = targetPosX - position.x;
-    float errY = targetPosY - position.y;
-    
-    // 限制最大移动速度 (1.5m/s)
-    float vWorldX = constrain(errX * 1.5f, -1.5f, 1.5f);
-    float vWorldY = constrain(errY * 1.5f, -1.5f, 1.5f);
-
-    // 转换到机体坐标系
-    float yaw = attitude.getYaw(), c = cos(yaw), s = sin(yaw);
-    float targetVelBodyX = vWorldX * c + vWorldY * s;
-    float targetVelBodyY = -vWorldX * s + vWorldY * c;
-
-    targetVelBodyX_debug = targetVelBodyX;
-    targetVelBodyY_debug = targetVelBodyY;
-
-    // 4. 速度环 PID
-    float velErrorX = targetVelBodyX - velocity.x;
-    float velErrorY = targetVelBodyY - velocity.y;
-
-    // D项 (微分)
-    float dTermX = (velErrorX - lastVelErrorX) / dt * POS_HOLD_D_X;
-    float dTermY = (velErrorY - lastVelErrorY) / dt * POS_HOLD_D_Y;
-    lastVelErrorX = velErrorX;
-    lastVelErrorY = velErrorY;
-
-    // I项 (积分 - 带死区)
-    if (abs(velErrorX) > POS_HOLD_DEADBAND) {
-        velIntegralX = constrain(velIntegralX + velErrorX * dt * POS_HOLD_I_X, -POS_HOLD_I_LIMIT, POS_HOLD_I_LIMIT);
-    }
-    if (abs(velErrorY) > POS_HOLD_DEADBAND) {
-        velIntegralY = constrain(velIntegralY + velErrorY * dt * POS_HOLD_I_Y, -POS_HOLD_I_LIMIT, POS_HOLD_I_LIMIT);
-    }
-
-    // 5. 输出目标角度
-    float flowPitch = constrain(velErrorX * POS_HOLD_P_X + velIntegralX + dTermX + POS_HOLD_TRIM_X, -MAX_FLOW_ANGLE, MAX_FLOW_ANGLE);
-    float flowRoll  = constrain(velErrorY * POS_HOLD_P_Y + velIntegralY + dTermY + POS_HOLD_TRIM_Y, -MAX_FLOW_ANGLE, MAX_FLOW_ANGLE);
-
-    // 应用目标姿态 
-    setAttitudeTarget(flowRoll, flowPitch, controlYaw);
-}
-
-// ----------------------------------------------------------------------------
-// 普通手动姿态逻辑
-// ----------------------------------------------------------------------------
-void runManualLevelControl() {
-    // 低空或手动模式下，重置定点状态
-    posHoldLocked = false;
-    velIntegralX = 0; 
-    velIntegralY = 0;
-
-    // 目标角度 = 摇杆 * 最大倾角 + Trim
-    float targetRoll  = controlRoll * tiltMax + POS_HOLD_TRIM_Y;
-    float targetPitch = controlPitch * tiltMax + POS_HOLD_TRIM_X;
-
-    setAttitudeTarget(targetRoll, targetPitch, controlYaw);
-}
-
-// 辅助函数：设置目标欧拉角
-void setAttitudeTarget(float roll, float pitch, float yawRate) {
-    float currentYaw = attitude.getYaw();
-    float targetYaw = attitudeTarget.getYaw();
-    
-    // 如果 Yaw 目标无效或正在转动 Yaw，使用当前 Yaw
-    if (invalid(targetYaw) || yawRate != 0) {
-        targetYaw = currentYaw;
-    }
-    
-    attitudeTarget = Quaternion::fromEuler(Vector(roll, pitch, targetYaw));
-    ratesExtra = Vector(0, 0, -yawRate * maxRate.z);
-}
-
-// ----------------------------------------------------------------------------
-// 姿态环控制器
-// ----------------------------------------------------------------------------
 void controlAttitude() {
-    if (!armed || attitudeTarget.invalid() || thrustTarget < 0.01f) return;
+	if (!armed || attitudeTarget.invalid() || thrustTarget < 0.01f) {
+		ratesTarget = Vector(0, 0, 0);
+		return;
+	}
 
-    const Vector up(0, 0, 1);
-    Vector upActual = Quaternion::rotateVector(up, attitude);
-    Vector upTarget = Quaternion::rotateVector(up, attitudeTarget);
-    Vector error = Vector::rotationVectorBetween(upTarget, upActual);
+	float rollError = wrapAngle(attitudeTarget.getRoll() - attitude.getRoll());
+	float pitchError = wrapAngle(attitudeTarget.getPitch() - attitude.getPitch());
+	float attScale = (mode == STAB || mode == ALT_HOLD || mode == POS_HOLD) ? getStabAttitudeScale() : 1.0f;
 
-    ratesTarget.x = rollPID.update(error.x) + ratesExtra.x;
-    ratesTarget.y = pitchPID.update(error.y) + ratesExtra.y;
-    
-    float yawError = wrapAngle(attitudeTarget.getYaw() - attitude.getYaw());
-    ratesTarget.z = yawPID.update(yawError) + ratesExtra.z;
+	ratesTarget.x = constrain(rollPID.update(rollError) * attScale + ratesExtra.x, -maxRate.x, maxRate.x);
+	ratesTarget.y = constrain(pitchPID.update(pitchError) * attScale + ratesExtra.y, -maxRate.y, maxRate.y);
+	float yawError = wrapAngle(attitudeTarget.getYaw() - attitude.getYaw());
+	ratesTarget.z = (yawPID.update(yawError) + ratesExtra.z) * getStabYawScale();
 }
 
-// ----------------------------------------------------------------------------
-// 角速度环控制器
-// ----------------------------------------------------------------------------
 void controlRates() {
-    if (!armed || ratesTarget.invalid() || thrustTarget < 0.01f) {
-        torqueTarget.invalidate();
-        return;
-    }
+	if (!armed || ratesTarget.invalid() || thrustTarget < 0.01f) {
+		torqueTarget = Vector(0, 0, 0);
+		return;
+	}
 
-    Vector error = ratesTarget - rates;
-    torqueTarget.x = rollRatePID.update(error.x);
-    torqueTarget.y = pitchRatePID.update(error.y);
-    torqueTarget.z = yawRatePID.update(error.z);
+	float airBlend = (mode == STAB || mode == ALT_HOLD || mode == POS_HOLD) ? getStabAirBlend() : 1.0f;
+	float rollDAlphaBase = constrain(rollRateDAlpha, 0.001f, 1.0f);
+	float pitchDAlphaBase = constrain(pitchRateDAlpha, 0.001f, 1.0f);
+	rollRatePID.lpf.alpha = min(rollDAlphaBase, 0.04f) + (rollDAlphaBase - min(rollDAlphaBase, 0.04f)) * airBlend;
+	pitchRatePID.lpf.alpha = min(pitchDAlphaBase, 0.04f) + (pitchDAlphaBase - min(pitchDAlphaBase, 0.04f)) * airBlend;
+
+	Vector error = ratesTarget - rates;
+	float rateScale = (mode == STAB || mode == ALT_HOLD || mode == POS_HOLD) ? getStabRateScale() : 1.0f;
+	torqueTarget.x = rollRatePID.update(error.x) * rateScale;
+	torqueTarget.y = pitchRatePID.update(error.y) * rateScale;
+	torqueTarget.z = yawRatePID.update(error.z) * getStabYawScale();
 }
 
-// ----------------------------------------------------------------------------
-// 混控器
-// ----------------------------------------------------------------------------
 void controlTorque() {
-    if (!armed) { 
-        memset(motors, 0, sizeof(motors)); 
-        return;
-    }
-    
-    // 怠速
-    if (thrustTarget < 0.1f) {
-        for(int i=0; i<4; i++) motors[i] = 0.05f;
-        return;
-    }
+	if (!armed) {
+		memset(motors, 0, sizeof(motors));
+		return;
+	}
+	if (!torqueTarget.valid()) return;
 
-    // X字四轴混控
-    motors[MOTOR_FRONT_LEFT]  = thrustTarget + torqueTarget.x - torqueTarget.y + torqueTarget.z;
-    motors[MOTOR_FRONT_RIGHT] = thrustTarget - torqueTarget.x - torqueTarget.y - torqueTarget.z;
-    motors[MOTOR_REAR_LEFT]   = thrustTarget + torqueTarget.x + torqueTarget.y - torqueTarget.z;
-    motors[MOTOR_REAR_RIGHT]  = thrustTarget - torqueTarget.x + torqueTarget.y + torqueTarget.z;
-    
-    for(int i=0; i<4; i++) motors[i] = constrain(motors[i], 0.0f, 1.0f);
-}
+	if (thrustTarget <= motorIdleThrust) {
+		motors[0] = motorIdleThrust;
+		motors[1] = motorIdleThrust;
+		motors[2] = motorIdleThrust;
+		motors[3] = motorIdleThrust;
+		return;
+	}
 
-// ----------------------------------------------------------------------------
-// 调试信息输出
-// ----------------------------------------------------------------------------
-void debugControl() {
-    static uint32_t lastDbg = 0;
-    if (millis() - lastDbg < 50) return; // 20Hz 发送频率，防止阻塞
-    lastDbg = millis();
+	motors[MOTOR_FRONT_LEFT] = thrustTarget + torqueTarget.x - torqueTarget.y + torqueTarget.z;
+	motors[MOTOR_FRONT_RIGHT] = thrustTarget - torqueTarget.x - torqueTarget.y - torqueTarget.z;
+	motors[MOTOR_REAR_LEFT] = thrustTarget + torqueTarget.x + torqueTarget.y - torqueTarget.z;
+	motors[MOTOR_REAR_RIGHT] = thrustTarget - torqueTarget.x + torqueTarget.y + torqueTarget.z;
 
-    int mode = (int)debugMode; // 获取当前的调试模式
-
-    switch (mode) {
-        // ==========================
-        // 模式 1-4: 控制环路调试
-        // ==========================
-        case 1: // [姿态环] 目标角度 vs 实际角度 (单位: 度)
-        {
-            Vector attTgt = attitudeTarget.toEuler();
-            Vector attAct = attitude.toEuler();
-            // X: 目标Roll, Y: 实际Roll, Z: 目标Pitch
-            sendDebugVect("ATT_CHK", degrees(attTgt.x), degrees(attAct.x), degrees(attTgt.y)); 
-            break;
-        }
-        case 2: // [角速度环] PID 分项分析 (以 Roll 轴为例)
-        {
-            float error = ratesTarget.x - rates.x;
-            // 反算 PID 分项
-            float p = error * rollRatePID.p;
-            float i = constrain(rollRatePID.integral * rollRatePID.i, -rollRatePID.windup, rollRatePID.windup);
-            float d = rollRatePID.derivative * rollRatePID.d;
-            // X: P项, Y: I项, Z: D项
-            sendDebugVect("R_PID", p, i, d); 
-            break;
-        }
-        case 3: // [速度环] 目标速度 vs 实际速度 (XY轴)
-        {
-            // 使用之前"偷"出来的全局变量
-            // X: 目标速度X, Y: 实际速度X, Z: 速度环积分项X
-            sendDebugVect("VEL_X", targetVelBodyX_debug, velocity.x, velIntegralX);
-            break;
-        }
-        case 4: // [位置环/光流] 原始光流数据
-        {
-            extern float opticalFlowVelocityX, opticalFlowVelocityY, opticalFlowHeight; // 再次确保引用
-            // X: 光流X速度, Y: 光流Y速度, Z: 光流高度
-            sendDebugVect("FLOW", opticalFlowVelocityX, opticalFlowVelocityY, opticalFlowHeight);
-            break;
-        }
-
-        // ==========================
-        // 模式 5-8: 状态估计调试
-        // ==========================
-        case 5: // [卡尔曼滤波] 零偏估计 (Bias)
-        {
-            // 观察陀螺仪零偏是否收敛
-            sendDebugVect("K_BIAS", kalmanRoll.getBias(), kalmanPitch.getBias(), 0);
-            break;
-        }
-        case 6: // [姿态估计] 融合效果分析
-        {
-            extern Vector acc; // 确保引用
-            // 重算加速度计角度用于对比
-            float accRoll = atan2(acc.y, acc.z); 
-            // X: 原始加速度计角度(噪声大), Y: 融合后角度(平滑), Z: 陀螺仪角速度
-            sendDebugVect("EST_ROLL", degrees(accRoll), degrees(attitude.getRoll()), degrees(rates.x));
-            break;
-        }
-        case 7: // [高度估计] 传感器 vs 融合结果
-        {
-            extern Vector acc; // 确保引用
-            extern float opticalFlowHeight;
-            // 计算垂直加速度(去除重力)
-            Vector accWorld = Quaternion::rotateVector(acc, attitude);
-            float accZ_linear = accWorld.z - 9.80665f;
-            // X: 传感器高度, Y: 估计高度, Z: 垂直加速度
-            sendDebugVect("EST_Z", opticalFlowHeight, position.z, accZ_linear);
-            break;
-        }
-        case 8: // [水平速度估计] 光流测量 vs 融合速度
-        {
-            extern float opticalFlowVelocityY;
-            float flow_meas_x = -opticalFlowVelocityY; // 根据 estimate.ino 逻辑
-            // X: 光流测量速度(含噪声), Y: 融合后速度, Z: 两者误差
-            sendDebugVect("EST_VX", flow_meas_x, velocity.x, flow_meas_x - velocity.x);
-            break;
-        }
-        // ==========================
-        // 模式 9-11: 基础状态查看
-        // ==========================
-        case 9: // [姿态] Roll/Pitch/Yaw
-            sendDebugVect("ATT", degrees(attitude.getRoll()), degrees(attitude.getPitch()), degrees(attitude.getYaw()));
-            break;
-        
-        case 10: // [位置] X/Y/Z
-            sendDebugVect("POS", position.x, position.y, position.z);
-            break;
-
-        case 11: // [速度] VX/VY/VZ
-            sendDebugVect("VEL", velocity.x, velocity.y, velocity.z);
-            break;
-
-        // ==========================
-        // 默认模式 (Mode 0)
-        // ==========================
-        default: 
-        {
-            Vector attTgt = attitudeTarget.toEuler();
-            // 默认显示前后速度调试信息
-            sendDebugVect("TUN_X", velocity.x, velIntegralX, degrees(attTgt.y));
-            break;
-        }
-    }
+	for (int i = 0; i < 4; i++) motors[i] = constrain(motors[i], 0, 1);
 }
 
 const char* getModeName() {
-    switch(mode) {
-        case STAB: return "STAB";
-        case ALT_HOLD: return "ALT_HOLD";
-        case POS_HOLD: return "POS_HOLD";
-        case ACRO: return "ACRO";
-        default: return "UNKNOWN";
-    }
+	if (mode == RAW) return "RAW";
+	if (mode == ACRO) return "ACRO";
+	if (mode == STAB) return "STAB";
+	if (mode == AUTO) return "AUTO";
+	if (mode == ALT_HOLD) return "ALT_HOLD";
+	if (mode == POS_HOLD) return "POS_HOLD";
+	return "UNKNOWN";
 }

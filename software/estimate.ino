@@ -1,5 +1,7 @@
-// Copyright (c) 2023 Open32Drone Project
+// Copyright (c) 2023 Oleg Kalachev <okalachev@gmail.com>
 // Repository: https://github.com/okalachev/flix
+
+// Attitude, height and optical-flow position estimation
 
 #include "quaternion.h"
 #include "vector.h"
@@ -7,222 +9,347 @@
 #include "util.h"
 #include "kalman_angle.h"
 
-#ifndef ONE_G
-#define ONE_G 9.80665f
-#endif
-
-// ============================================================================
-//                               参数配置区域
-// ============================================================================
-
-// --- 1. 姿态解算参数 (Kalman Filter) ---
-#define RATES_LFP_ALPHA 0.2f        // 角速度低通滤波系数
-#define BOARD_ALIGN_PITCH 0.01f     // 板载安装误差修正 (Pitch)
-#define BOARD_ALIGN_ROLL -0.035f    // 板载安装误差修正 (Roll)
-
-// --- 2. 定高参数 (Z轴融合) ---
-#define ACC_Z_DEADBAND 1.5f         // 垂直加速度死区 (忽略微小震动)
-#define VEL_Z_DAMPING 0.99f         // 垂直速度阻尼 (模拟空气阻力)
-#define POS_Z_CORRECTION_GAIN 0.05f // 高度观测校正增益 (Sonar/Baro -> PosZ)
-#define VEL_Z_CORRECTION_GAIN 0.10f // 垂直速度校正增益 (Sonar/Baro -> VelZ)
-#define TERRAIN_JUMP_THRESHOLD 0.3f // 地形突变判定阈值 (米)
-
-// --- 3. 水平位置参数 (XY轴融合) ---
-#define FLOW_SMOOTHING 0.4f         // 光流速度平滑系数 (1.0=最灵敏, 0.1=最平滑)
-#define TILT_SAFE_LIMIT 0.82f       // 倾角安全限制 (cos(35deg) ≈ 0.82)
-#define VEL_DAMPING_XY 0.95f        // 无光流时的水平速度阻尼
-
-// ============================================================================
-//                               全局对象与变量
-// ============================================================================
-
-// --- 滤波器实例 ---
 KalmanAngle kalmanRoll;
 KalmanAngle kalmanPitch;
-static LowPassFilter<Vector> ratesFilter(RATES_LFP_ALPHA);
+float yawAccumulated = 0.0f;
 
-// --- 状态变量 ---
-// Yaw 轴积分 (无磁力计模式)
-float yaw_accumulated = 0;
+#define ACC_Z_DEADBAND 1.5f
+#define VEL_Z_DAMPING 0.99f
+#define POS_Z_CORRECTION_GAIN 0.05f
+#define VEL_Z_CORRECTION_GAIN 0.10f
+#define ACC_CLIP_THRESHOLD_G 14.0f
+#define ACC_ATT_LPF_ALPHA 0.02f
+#define ATT_RATES_LPF_ALPHA 0.03f
+#define ATT_RATES_GROUND_DB radians(3.0f)
+#define ATT_YAW_GROUND_DB radians(2.0f)
+#define ATT_ACCEL_TRUST_DISABLE 0.15f
+#define ATT_R_MEASURE_MAX 1.50f
+#define ATT_R_MEASURE_NOISY_MIN 1.20f
 
-// --- 外部引用 ---
+float boardAlignPitch = 0.019f;
+float boardAlignRoll = 0.0f;
+float flowGyroCompPitch = -1.1f;
+float flowGyroCompRoll = -1.1f;
+float flowVelocitySmoothing = 0.18f;
+float flowInnovationLimit = 0.5f;
+float flowTiltCosMin = 0.90f;
+float imuRateAlpha = 0.1f;
+float flowBiasAdapt = 0.02f;
+float flowVelocityZeroDeadband = 0.03f;
+float flowPositionZeroDeadband = 0.015f;
+float flowScaleX = 1.0f;
+float flowScaleY = 1.0f;
+float flowArmMinHeight = 0.22f;
+float flowArmMinThrottle = 0.12f;
+float flowStationaryGyro = radians(8.0f);
+float flowStationaryVel = 0.06f;
+
+Vector rates;
+Quaternion attitude;
+bool landed;
+
+Vector flowRawBodyVel;
+Vector flowGyroBodyVel;
+Vector flowCompBodyVel;
+Vector flowBias;
+Vector flowInnov;
+Vector rawBodyVel;
+Vector rawWorldPos;
+bool flowStationary = true;
+bool flowAirborne = false;
+bool flowCtrlZeroLocked = true;
+bool flowCtrlUsingFlow = false;
+int flowRejectReason = 0;
+
+float imuAccelTrustDebug = 1.0f;
+float imuAccelMeasureRDebug = 0.03f;
+bool imuAccelClippedDebug = false;
+bool imuHeightAccelValidDebug = true;
+bool imuAccelAngleUsedDebug = true;
+float imuAccelAngleBlendDebug = 1.0f;
+float imuAccRollAngleDebug = 0.0f;
+float imuAccPitchAngleDebug = 0.0f;
+float imuAccNormDebug = 0.0f;
+float imuAccAttNormDebug = 0.0f;
+float imuAccVibeDebug = 0.0f;
+Vector imuAccForAttitudeDebug;
+Vector imuAttitudeRatesDebug;
+bool gyroBiasLearnAllowedDebug = false;
+
 extern Vector gyro;
 extern Vector acc;
-extern Vector rates;       // 滤波后的角速度
-extern Quaternion attitude;
 extern float dt;
-extern bool landed;
-extern Vector velocity;    // 机体坐标系速度 (XY), 世界系 (Z)
-extern Vector position;    // 全局位置 (NED世界坐标系)
-
-// --- 外部传感器数据 ---
-extern bool opticalFlowHealthy;
-extern float opticalFlowVelocityX; // 像素速度或物理速度 (m/s)
-extern float opticalFlowVelocityY; // 像素速度或物理速度 (m/s)
-extern float opticalFlowHeight;    // 对地高度
 extern bool armed;
-extern float controlThrottle;      // 用于判断是否在地面
+extern float controlThrottle;
+extern Vector velocity;
+extern Vector position;
+extern bool opticalFlowHealthy;
+extern float opticalFlowVelocityX;
+extern float opticalFlowVelocityY;
+extern float opticalFlowHeight;
 
-// --- 外部函数 ---
 extern bool motorsActive();
-extern void sendDebugVect(const char* name, float x, float y, float z);
 
-// --- 本地函数声明 ---
-void estimateAttitude();
 void estimateHeight();
-void estimatePositionXY();
+void estimateHorizontalVelocity();
+float getDynamicRateAlpha();
+float getDynamicAttitudeRateAlpha();
+float getDynamicAccelTrust(float accNorm, bool accClipped);
+bool isAccelClipped();
+float applyAxisDeadband(float value, float deadband);
+float blendAngleToward(float currentAngle, float measuredAngle, float blend);
 
-// ============================================================================
-//                               主处理函数
-// ============================================================================
+float applyAxisDeadband(float value, float deadband) {
+	if (abs(value) <= deadband) return 0.0f;
+	return value > 0.0f ? value - deadband : value + deadband;
+}
+
+float blendAngleToward(float currentAngle, float measuredAngle, float blend) {
+	float delta = wrapAngle(measuredAngle - currentAngle);
+	return wrapAngle(currentAngle + delta * constrain(blend, 0.0f, 1.0f));
+}
+
+bool isAccelClipped() {
+	float clipLimit = ONE_G * ACC_CLIP_THRESHOLD_G;
+	return abs(acc.x) >= clipLimit || abs(acc.y) >= clipLimit || abs(acc.z) >= clipLimit;
+}
+
+float getDynamicRateAlpha() {
+	float baseAlpha = constrain(imuRateAlpha, 0.001f, 1.0f);
+	if (!motorsActive()) return baseAlpha;
+
+	float throttleBlend = constrain(mapf(controlThrottle, 0.08f, 0.25f, 0.0f, 1.0f), 0.0f, 1.0f);
+	float nearGroundBlend = constrain(1.0f - position.z / 0.20f, 0.0f, 1.0f);
+	float filteredAlpha = imuAccelClippedDebug ? 0.010f : 0.020f;
+	return baseAlpha + (min(baseAlpha, filteredAlpha) - baseAlpha) * throttleBlend * nearGroundBlend;
+}
+
+float getDynamicAttitudeRateAlpha() {
+	float alpha = ATT_RATES_LPF_ALPHA;
+	if (!motorsActive()) return alpha;
+
+	float throttleBlend = constrain(mapf(controlThrottle, 0.08f, 0.25f, 0.0f, 1.0f), 0.0f, 1.0f);
+	float nearGroundBlend = constrain(1.0f - position.z / 0.25f, 0.0f, 1.0f);
+	float filteredAlpha = imuAccelClippedDebug ? 0.004f : 0.008f;
+	return alpha + (filteredAlpha - alpha) * throttleBlend * nearGroundBlend;
+}
+
+float getDynamicAccelTrust(float accNorm, bool accClipped) {
+	float normError = abs(accNorm - ONE_G) / ONE_G;
+	float normTrust = constrain(mapf(normError, 0.02f, 0.12f, 1.0f, 0.0f), 0.0f, 1.0f);
+	if (accClipped) return 0.0f;
+	if (!motorsActive()) return normTrust;
+
+	float throttleBlend = constrain(mapf(controlThrottle, 0.08f, 0.25f, 0.0f, 1.0f), 0.0f, 1.0f);
+	float nearGroundBlend = constrain(1.0f - position.z / 0.30f, 0.0f, 1.0f);
+	float motorPenalty = throttleBlend * nearGroundBlend;
+	return constrain(normTrust * (1.0f - motorPenalty * 0.98f), 0.0f, 1.0f);
+}
 
 void estimate() {
-    // 1. 姿态解算 (Acc + Gyro -> Roll/Pitch/Yaw)
-    estimateAttitude();
+	if (!(dt > 0.0f)) return;
 
-    // 2. 落地状态检测
-    float accNorm = acc.norm();
-    landed = !motorsActive() && abs(accNorm - ONE_G) < ONE_G * 0.1f;
+	float accNorm = acc.norm();
+	bool accClipped = isAccelClipped();
+	bool opticalHeightValid = opticalFlowHealthy && opticalFlowHeight > 0.05f;
+	imuAccelClippedDebug = accClipped;
 
-    // 3. 位置与速度估计
-    estimateHeight();           
-    estimatePositionXY();
+	static LowPassFilter<Vector> ratesFilter(0.1f);
+	static LowPassFilter<Vector> attitudeRatesFilter(ATT_RATES_LPF_ALPHA);
+	static LowPassFilter<float> accelTrustFilter(0.08f);
+	static LowPassFilter<Vector> accAttitudeFilter(ACC_ATT_LPF_ALPHA);
+
+	ratesFilter.alpha = getDynamicRateAlpha();
+	rates = ratesFilter.update(gyro);
+	attitudeRatesFilter.alpha = getDynamicAttitudeRateAlpha();
+	Vector attitudeRates = attitudeRatesFilter.update(rates);
+
+	Vector accForAttitude = accAttitudeFilter.update(acc);
+	imuAccNormDebug = accNorm;
+	imuAccAttNormDebug = accForAttitude.norm();
+	imuAccVibeDebug = (acc - accForAttitude).norm();
+	imuAccForAttitudeDebug = accForAttitude;
+
+	float accelTrust = accelTrustFilter.update(getDynamicAccelTrust(accNorm, accClipped));
+	bool nearGroundMotorNoise = motorsActive() && !opticalHeightValid && position.z < 0.25f;
+	if (nearGroundMotorNoise) {
+		attitudeRates.x = applyAxisDeadband(attitudeRates.x, ATT_RATES_GROUND_DB);
+		attitudeRates.y = applyAxisDeadband(attitudeRates.y, ATT_RATES_GROUND_DB);
+		attitudeRates.z = applyAxisDeadband(attitudeRates.z, ATT_YAW_GROUND_DB);
+	}
+	imuAttitudeRatesDebug = attitudeRates;
+
+	float accelAngleBlend = constrain(mapf(accelTrust, ATT_ACCEL_TRUST_DISABLE, 1.0f, 0.0f, 1.0f), 0.0f, 1.0f);
+	if (nearGroundMotorNoise) accelAngleBlend = min(accelAngleBlend, 0.05f);
+	if (accelTrust <= ATT_ACCEL_TRUST_DISABLE || accClipped) accelAngleBlend = 0.0f;
+
+	float dynamicRMeasure = 0.03f + (ATT_R_MEASURE_MAX - 0.03f) * (1.0f - accelTrust);
+	if (nearGroundMotorNoise) dynamicRMeasure = max(dynamicRMeasure, ATT_R_MEASURE_NOISY_MIN);
+	kalmanRoll.R_measure = dynamicRMeasure;
+	kalmanPitch.R_measure = dynamicRMeasure;
+	imuAccelTrustDebug = accelTrust;
+	imuAccelMeasureRDebug = dynamicRMeasure;
+	imuAccelAngleUsedDebug = accelAngleBlend > 0.001f;
+	imuAccelAngleBlendDebug = accelAngleBlend;
+
+	float accRollAngleMeasured = atan2(accForAttitude.y, accForAttitude.z) + boardAlignRoll;
+	float accPitchAngleMeasured = atan2(-accForAttitude.x, sqrt(accForAttitude.y * accForAttitude.y + accForAttitude.z * accForAttitude.z)) + boardAlignPitch;
+	imuAccRollAngleDebug = accRollAngleMeasured;
+	imuAccPitchAngleDebug = accPitchAngleMeasured;
+
+	float accRollAngle = imuAccelAngleUsedDebug ? blendAngleToward(kalmanRoll.angle, accRollAngleMeasured, accelAngleBlend) : kalmanRoll.angle;
+	float accPitchAngle = imuAccelAngleUsedDebug ? blendAngleToward(kalmanPitch.angle, accPitchAngleMeasured, accelAngleBlend) : kalmanPitch.angle;
+
+	float estimatedRoll = kalmanRoll.getAngle(accRollAngle, attitudeRates.x, dt);
+	float estimatedPitch = kalmanPitch.getAngle(accPitchAngle, attitudeRates.y, dt);
+	yawAccumulated = wrapAngle(yawAccumulated + attitudeRates.z * dt);
+	attitude = Quaternion::fromEuler(Vector(estimatedRoll, estimatedPitch, yawAccumulated));
+
+	landed = !motorsActive() && abs(accNorm - ONE_G) < ONE_G * 0.1f;
+	estimateHeight();
+	estimateHorizontalVelocity();
 }
 
-// ============================================================================
-//                               子模块实现
-// ============================================================================
-
-// ----------------------------------------------------------------------------
-// 1. 姿态解算
-// ----------------------------------------------------------------------------
-void estimateAttitude() {
-    // A. 预处理角速度
-    rates = ratesFilter.update(gyro);
-
-    // B. 计算加速度计观测角度 (Measurement)
-    // Roll: atan2(acc.y, acc.z)
-    float accRollAngle = atan2(acc.y, acc.z);
-    // Pitch: atan2(-acc.x, sqrt(y^2 + z^2))
-    float accPitchAngle = atan2(-acc.x, sqrt(acc.y * acc.y + acc.z * acc.z));
-
-    // C. 应用板载安装误差修正
-    accRollAngle += BOARD_ALIGN_ROLL;
-    accPitchAngle += BOARD_ALIGN_PITCH;
-
-    // D. 卡尔曼滤波更新
-    // getAngle(观测角度, 角速度, dt)
-    float estimatedRoll = kalmanRoll.getAngle(accRollAngle, rates.x, dt);
-    float estimatedPitch = kalmanPitch.getAngle(accPitchAngle, rates.y, dt);
-
-    // E. Yaw轴处理 (纯积分)
-    yaw_accumulated += rates.z * dt;
-    // 归一化到 [-PI, PI]
-    if (yaw_accumulated > PI) yaw_accumulated -= 2 * PI;
-    if (yaw_accumulated < -PI) yaw_accumulated += 2 * PI;
-
-    // F. 更新全局姿态四元数
-    attitude = Quaternion::fromEuler(Vector(estimatedRoll, estimatedPitch, yaw_accumulated));
-}
-
-// ----------------------------------------------------------------------------
-// 2. 高度估计
-// ----------------------------------------------------------------------------
 void estimateHeight() {
-    if (dt <= 0) return;
+	bool opticalHeightValid = opticalFlowHealthy && opticalFlowHeight > 0.05f;
+	bool allowAccelHeight = !imuAccelClippedDebug && (!motorsActive() || opticalHeightValid || position.z > 0.20f);
+	imuHeightAccelValidDebug = allowAccelHeight;
 
-    // A. 计算世界坐标系下的垂直加速度
-    Vector accWorld = Quaternion::rotateVector(acc, attitude);
-    float acc_diff = accWorld.z - ONE_G;
+	if (allowAccelHeight) {
+		Vector accWorld = Quaternion::rotateVector(acc, attitude);
+		float accDiff = accWorld.z - ONE_G;
+		float accZLinear = abs(accDiff) > ACC_Z_DEADBAND ? accDiff : 0.0f;
+		position.z += velocity.z * dt + 0.5f * accZLinear * dt * dt;
+		velocity.z += accZLinear * dt;
+		velocity.z *= VEL_Z_DAMPING;
+	} else {
+		velocity.z *= 0.70f;
+		if (!opticalHeightValid && position.z < 0.25f) {
+			position.z += (0.0f - position.z) * 0.20f;
+			if (abs(position.z) < 0.003f) position.z = 0.0f;
+		} else {
+			position.z += velocity.z * dt;
+		}
+	}
 
-    // 死区处理，消除静止时的噪声漂移
-    float accZ_linear = 0;
-    if (abs(acc_diff) > ACC_Z_DEADBAND) {
-        accZ_linear = acc_diff;
-    }
+	if (opticalHeightValid) {
+		float posError = opticalFlowHeight - position.z;
+		if (abs(posError) > 0.30f && abs(velocity.z) < 1.0f) position.z += posError * 0.02f;
+		else {
+			position.z += posError * POS_Z_CORRECTION_GAIN;
+			velocity.z += posError * VEL_Z_CORRECTION_GAIN;
+		}
+	}
 
-    // B. 惯性导航预测 (Predict)
-    // s = s + v*t + 0.5*a*t^2
-    position.z += velocity.z * dt + 0.5f * accZ_linear * dt * dt;
-    velocity.z += accZ_linear * dt;
-    
-    // 阻尼 (由于气压计/超声波滞后，纯积分容易发散，这里加一点阻尼稳住)
-    velocity.z *= VEL_Z_DAMPING; 
-
-    // C. 观测融合
-    // 注意：这里假设 opticalFlowHeight 是准确的对地高度 (来自超声波或激光)
-    if (opticalFlowHeight > 0.05f) {
-        float posError = opticalFlowHeight - position.z;
-        
-        // 地形突变检测 (Step Change Detection)
-        // 场景：飞机平飞越过桌子边缘，高度读数突变，但加速度没变。
-        // 此时不应该认为是飞机瞬间掉下去了，而应该认为是地形变了。
-        bool terrain_jump = abs(posError) > TERRAIN_JUMP_THRESHOLD && abs(velocity.z) < 1.0f;
-
-        if (terrain_jump) {
-            // 缓慢跟随地形变化 (低增益)
-            position.z += posError * 0.02f; 
-        } else {
-            // 正常校正 (高增益)
-            position.z += posError * POS_Z_CORRECTION_GAIN;
-            velocity.z += posError * VEL_Z_CORRECTION_GAIN;
-        }
-    }
-
-    // D. 地面约束
-    if (position.z < 0) {
-        position.z = 0;
-        if (velocity.z < 0) velocity.z = 0;
-    }
+	if (position.z < 0.0f) {
+		position.z = 0.0f;
+		if (velocity.z < 0.0f) velocity.z = 0.0f;
+	}
 }
 
-// ----------------------------------------------------------------------------
-// 3. 水平位置估计 
-// ----------------------------------------------------------------------------
-void estimatePositionXY() {
-    if (dt <= 0) return;
+void estimateHorizontalVelocity() {
+	static LowPassFilter<float> lpfGyroX(0.08f);
+	static LowPassFilter<float> lpfGyroY(0.08f);
+	static Delay airborneDelay(0.25f);
+	static Vector ctrlAnchor;
+	static bool ctrlAnchorValid = false;
 
-    // A. 落地检查
-    // 如果电机未解锁，或油门很低且高度很低，认为在地面 -> 速度归零
-    bool on_ground = !armed || (position.z < 0.15f && controlThrottle < 0.05f);
-    if (on_ground) {
-        velocity.x = 0;
-        velocity.y = 0;
-        return; 
-    }
-    
-    // B. 倾角检查 (安全保护)
-    // 如果倾角过大，光流大概率失效，不再信任
-    Vector up = Quaternion::rotateVector(Vector(0, 0, 1), attitude);
-    bool is_tilted_safe = abs(up.z) > TILT_SAFE_LIMIT; 
+	flowRawBodyVel = Vector();
+	flowGyroBodyVel = Vector();
+	flowCompBodyVel = Vector();
+	rawBodyVel = Vector();
+	flowInnov = Vector();
+	flowCtrlUsingFlow = false;
+	flowRejectReason = 0;
 
-    // C. 光流数据融合
-    bool flow_is_valid = opticalFlowHealthy && opticalFlowHeight > 0.05f && is_tilted_safe;
+	Vector up = Quaternion::rotateVector(Vector(0, 0, 1), attitude);
+	bool tiltRejected = abs(up.z) < flowTiltCosMin;
+	bool heightRejected = opticalFlowHeight <= 0.05f;
+	bool flowAvailable = opticalFlowHealthy && !heightRejected && !tiltRejected;
+	bool airborneCandidate = armed && controlThrottle > flowArmMinThrottle && position.z > flowArmMinHeight;
+	flowAirborne = airborneDelay.update(airborneCandidate);
+	bool stationaryCandidate = false;
 
-    if (flow_is_valid) {
-        // 需根据实际传感器调整符号    
-        float flow_meas_x = -opticalFlowVelocityY; 
-        float flow_meas_y = opticalFlowVelocityX;  
+	if (flowAvailable) {
+		flowGyroBodyVel.x = lpfGyroX.update(gyro.y * opticalFlowHeight);
+		flowGyroBodyVel.y = lpfGyroY.update(-gyro.x * opticalFlowHeight);
 
-        // 平滑逼近
-        velocity.x += (flow_meas_x - velocity.x) * FLOW_SMOOTHING;
-        velocity.y += (flow_meas_y - velocity.y) * FLOW_SMOOTHING;
+		flowRawBodyVel.x = (-opticalFlowVelocityY) * flowScaleX;
+		flowRawBodyVel.y = opticalFlowVelocityX * flowScaleY;
+		flowCompBodyVel.x = flowRawBodyVel.x - flowGyroCompPitch * flowGyroBodyVel.x;
+		flowCompBodyVel.y = flowRawBodyVel.y - flowGyroCompRoll * flowGyroBodyVel.y;
 
-        // 零速锁定 =
-        // 当光流读数极小时，强制衰减速度，增强悬停稳定性
-        if (abs(flow_meas_x) < 0.05f) velocity.x *= 0.8f; 
-        if (abs(flow_meas_y) < 0.05f) velocity.y *= 0.8f;
+		stationaryCandidate =
+			!flowAirborne &&
+			abs(flowCompBodyVel.x) < flowStationaryVel &&
+			abs(flowCompBodyVel.y) < flowStationaryVel &&
+			abs(rates.x) < flowStationaryGyro &&
+			abs(rates.y) < flowStationaryGyro &&
+			controlThrottle < flowArmMinThrottle;
 
-    } else {
-        // 无光流信号时，水平速度阻尼，避免漂移
-        velocity.x *= VEL_DAMPING_XY; 
-        velocity.y *= VEL_DAMPING_XY;
-    }
+		if (stationaryCandidate) {
+			flowBias.x += (flowCompBodyVel.x - flowBias.x) * flowBiasAdapt;
+			flowBias.y += (flowCompBodyVel.y - flowBias.y) * flowBiasAdapt;
+		}
 
-    // D. 位置积分 (机体系速度 -> 世界系位置)
-    Vector bodyVel(velocity.x, velocity.y, 0);
-    Vector worldVel = Quaternion::rotateVector(bodyVel, attitude);
-    
-    position.x += worldVel.x * dt;
-    position.y += worldVel.y * dt;
+		rawBodyVel.x = flowCompBodyVel.x - flowBias.x;
+		rawBodyVel.y = flowCompBodyVel.y - flowBias.y;
+		Vector rawWorldVel = Quaternion::rotateVector(Vector(rawBodyVel.x, rawBodyVel.y, 0), attitude);
+		rawWorldPos.x += rawWorldVel.x * dt;
+		rawWorldPos.y += rawWorldVel.y * dt;
+	}
+
+	flowStationary = stationaryCandidate || (!flowAirborne && controlThrottle < flowArmMinThrottle * 0.5f);
+	flowCtrlZeroLocked = flowStationary || !flowAirborne;
+
+	if (!flowAvailable) {
+		if (!opticalFlowHealthy) flowRejectReason = 2;
+		else if (heightRejected) flowRejectReason = 3;
+		else if (tiltRejected) flowRejectReason = 4;
+	} else if (!flowAirborne) {
+		flowRejectReason = 5;
+	} else if (flowStationary) {
+		flowRejectReason = 1;
+	}
+
+	if (flowCtrlZeroLocked) {
+		if (!ctrlAnchorValid) {
+			ctrlAnchor.x = position.x;
+			ctrlAnchor.y = position.y;
+			ctrlAnchorValid = true;
+		}
+
+		velocity.x *= 0.3f;
+		velocity.y *= 0.3f;
+		if (abs(velocity.x) < flowVelocityZeroDeadband) velocity.x = 0.0f;
+		if (abs(velocity.y) < flowVelocityZeroDeadband) velocity.y = 0.0f;
+
+		position.x += (ctrlAnchor.x - position.x) * 0.35f;
+		position.y += (ctrlAnchor.y - position.y) * 0.35f;
+		if (abs(position.x - ctrlAnchor.x) < flowPositionZeroDeadband) position.x = ctrlAnchor.x;
+		if (abs(position.y - ctrlAnchor.y) < flowPositionZeroDeadband) position.y = ctrlAnchor.y;
+		return;
+	}
+
+	ctrlAnchorValid = false;
+
+	if (flowAvailable) {
+		flowInnov.x = rawBodyVel.x - velocity.x;
+		flowInnov.y = rawBodyVel.y - velocity.y;
+		velocity.x += constrain(flowInnov.x, -flowInnovationLimit, flowInnovationLimit) * flowVelocitySmoothing;
+		velocity.y += constrain(flowInnov.y, -flowInnovationLimit, flowInnovationLimit) * flowVelocitySmoothing;
+		flowCtrlUsingFlow = true;
+	} else {
+		velocity.x *= 0.95f;
+		velocity.y *= 0.95f;
+	}
+
+	if (abs(velocity.x) < flowVelocityZeroDeadband) velocity.x = 0.0f;
+	if (abs(velocity.y) < flowVelocityZeroDeadband) velocity.y = 0.0f;
+
+	Vector worldVel = Quaternion::rotateVector(Vector(velocity.x, velocity.y, 0), attitude);
+	if (abs(worldVel.x) < flowPositionZeroDeadband) worldVel.x = 0.0f;
+	if (abs(worldVel.y) < flowPositionZeroDeadband) worldVel.y = 0.0f;
+	position.x += worldVel.x * dt;
+	position.y += worldVel.y * dt;
 }
