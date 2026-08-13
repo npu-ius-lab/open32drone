@@ -26,7 +26,9 @@
 
 ##### 主控模块
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZjQ5YjI1YTI2MjQ1N2M0OWY2MTRjNWMyM2RlNGQyOTJfMTc0ZGZlN2M4MDFmM2YwZWJiZDcxNzhiMjJmOTkzZDRfSUQ6NzY0NTg5MzkzODIwNDc4OTkzOV8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\seed-s3.PNG" />
+</p>
 
 规格型号：Seeed Studio XIAO ESP32-S3 Sense
 
@@ -36,9 +38,13 @@
 
 ##### 机架桨叶
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MDgwYTRlNDJhMTE2MGVlMWRjNzE1ZDM1YWRlMzdmY2NfM2ZlOTA0NTZiOTc0NzUwZjUwODg3ZjA5YTNhMzIzMDlfSUQ6NzY0NTg5MzkzNjIwNDMwMzU2NF8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\paddle1.PNG" />
+</p>
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZDQ3OTMwMjg5ZTk3ZWNhYzU3YTJjZWUzNzQ1MWFiYWRfODQ5MTVkNDMyMWMyMDM5MzQ0YTQ1MjgyNzI1YWZlMjdfSUQ6NzY0NTg5MzkzNzY0Njk5NjY3Nl8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\paddle2.PNG" />
+</p>
 
 规格型号：12.3cm轴距机架，76mm桨叶（适配1mm轴径电机）
 
@@ -48,7 +54,9 @@
 
 ##### 空心杯电机
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NTMzZGQ3MDNiOWQwYzgzNWFjYzc0YzkwZGVkYmZlMjBfZDU2YzcyM2Q5ZWM4MmZmZTRkZjlkNWNlNzUyNTA5OTNfSUQ6NzY0NTg5MzkzNTU5MTk1MTUzOF8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\electric.PNG" />
+</p>
 
 规格型号：8520空心杯电机，轴径1mm
 
@@ -58,7 +66,9 @@
 
 ##### IMU模块 十轴传感器
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YWY1MGU4MDNjZTE0NzU4MGI5NDU4NTRjYjBiNDdjNjJfNGNjNGVlOGI1YWFmMTQwMmQzYzIxMzY1NjNhZWJkYzFfSUQ6NzY0NTg5MzkzNzE2MDM5MTg3NF8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\imu.PNG" />
+</p>
 
 规格型号：GY-91 九轴MPU9250+BMP280气压计
 
@@ -68,7 +78,9 @@
 
 ##### 升压模块
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NWJkNGUwODQxZmZkNmJkODZkZjgyMjMwOGUzMmJhYzVfNDhhN2ZiM2I5MzEwYTFmMjQ5MzRiZDllNGZlODczZGJfSUQ6NzY0NTg5MzkzNjQyNjYwMTY2NV8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\up_voltage.PNG" />
+</p>
 
 规格型号：3.3V升压5V模块
 
@@ -78,7 +90,9 @@
 
 ##### TOF光流模块
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MzZiZDhmYjk5YmI5NmEwZjQ4ZDgyMWU5YzdiYzM3MGZfZTg0Y2JmNzJiY2IzNmUzMDUzMTJkYmZlMWNjMDU4YjNfSUQ6NzY0NTg5MzkzNjY3OTgwMDAxMl8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\tof.PNG" />
+</p>
 
 规格型号：CORVON link协议
 
@@ -88,7 +102,9 @@
 
 ##### 电机驱动芯片
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YzI3NDQyMGIyZTU0ZmQ0MmJkYzYxNTdmNjIyZjlmZTlfZWY3YmM1OWQxOWNkYTQ5Y2EyNDMxM2E3YWI3MGQ1MzNfSUQ6NzY0NTg5MzkzNzQ0MTUwODU3Nl8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\mos.PNG" />
+</p>
 
 规格型号：MOS场效应管AO3400
 
@@ -98,7 +114,9 @@
 
 ##### 遥控器
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZjBmMjJmNzlmNGJlMDVkZTBiYTMyZTQxZTQ4ZTI2M2VfMjc2YzRiYmU0MjhiZmZkMmM2ZmIyMWYxODVkNmZkNzJfSUQ6NzY0NTg5MzkzNjg5MjAzODM0OF8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\controller.PNG" />
+</p>
 
 规格型号：福斯I6S单控
 
@@ -107,9 +125,9 @@
 参考价格：249元（1个价格）
 
 ##### 接收器
-
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MDQ3ZjM4NDVmN2U1OWRmNDk4NmEzNmUxNjc4YjE3N2JfYzgyYmEwYTk3NTY5OGYxOTU0YWQ2MWUxYmFhN2VmZGVfSUQ6NzY0NTg5MzkzOTA3NzIyMTU5M18xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
-
+<p align="center">
+    <img src="img\receiver.PNG" />
+</p>
 规格型号：福斯A8S接收器，SBUS接收器
 
 需求：1个
@@ -122,9 +140,13 @@
 
 #### 2. 底板加工
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MTFjZmRkZTRiOWVhNzM4ZjU1MGZhODM5YWU1Mjg5MmFfMGUyNTM4Y2QzODllMTAyM2U2Zjk2NWY3ODYyMjRjMjBfSUQ6NzY0NTg5MzkzNjY3MzgwMzQ4NF8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\pcb1.PNG" />
+</p>
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=N2FkMmNkOWYyMGY2MTUwMTNhYzI0YTI0ODViN2Y1NDlfNjEzYTRhZDc4NTAxZjFhMTNmZjBlYmUyM2ZjZDNhZmZfSUQ6NzY0NTg5MzkzODU4NjQyMjQ4N18xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\pcb2.PNG" />
+</p>
 
 规格型号：自制
 
@@ -134,21 +156,33 @@
 
 ##### 2.1 打开设计图
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MGI5ZDMxZjViNDMxZDU1Zjk1ZjE0MTMwNjM3MzUyZDVfM2I3NjliMmEwNThmMGEyZTkwNzg3YzZjZDAzMjE1ODNfSUQ6NzY0NTg5MzkzNzc1MTkxOTgwOV8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\design1.PNG" />
+</p>
 
 ##### 2.2 PCB下单
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NzZlY2RmMGUzZTE1YWUwNzM0ZTM3NGMwMjhjY2FlMGFfZTMyMDNlM2NkODNjM2M5MThiYThkODViNjI1YjI3OWZfSUQ6NzY0NTg5MzkzNTUzMzI5NjgzM18xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\design2.PNG" />
+</p>
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MTI0ZTgyMTYxMzBiZmU3YjM2Y2YxMDNkZWM4ZjEzZWFfMTdkNTU3ZTZlODVjZGM5NGIxMGYzNzE5Zjk3MGI3ZmFfSUQ6NzY0NTg5MzkzODI5NzA0ODI2OF8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\design3.PNG" />
+</p>
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YjFjNTkyMGNmOWM3ZTlhNmFhZGUyODAwYzUwYmVjMDFfNmJjYTgxNzFhZmMxMDQyNTJjYjFlYTA1ZmYxZTVhMWNfSUQ6NzY0NTg5MzkzNjIyNjg2NDM0OF8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\design4.PNG" />
+</p>
 
 其他基本默认选择
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NzZiMmJiNTY5YTdkMDUzODcyNjhjYjVkZjY2YWQzMTNfMDlkNWNjMGNmOTU3ODczNmNjMmY2NWViODU0ZDg5MTZfSUQ6NzY0NTg5MzkzODM0NzM3OTkwM18xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\design5.PNG" />
+</p>
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZjhmYjdkM2VjYTVlZTRmNzJlZGIzYjAwZmY2ZTZmNGFfZjNmMGJkODI1NWYyNmYyYmQ3NGY3YmYyNTNmY2I3MDFfSUQ6NzY0NTg5MzkzNjY3OTg4MTkzMl8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\design6.PNG" />
+</p>
 
 #### 3. 无人机组装
 
@@ -156,7 +190,9 @@
 
 电阻（0805规格10K 20K都可以）
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YzAzMDU2ZjI5OWI1ODE4MGY5Mzc1NTQ1ODI2MjEwZTlfNWI2OTEyZmQzNGZiZmQ4NjRkY2MzOTdhMzllZTkxZmVfSUQ6NzY0NTg5MzkzNjc4NzI0NjI5Nl8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\all_stuff.PNG" />
+</p>
 
 ##### 3.2 工具准备
 
@@ -180,7 +216,9 @@
 
 **⚠️ 避坑指南**：MOS 管具有方向性，请务必核对 PCB丝印（图标）的方向，焊反将导致上电后电机直接全速旋转，极易炸机。
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=ZWE1MWFmOGM4Mzc4NDQ3YTEyZmQwNzE5ZjQwZTAzYzNfMmMwODEzMzdmZmRmN2I3MzEzODRhNjY3Mjg0ZWRlOTlfSUQ6NzY0NTg5MzkzODM1MTQ5MjMwOV8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\hanjie1.PNG" />
+</p>
 
 ###### 步骤二：焊接模块插座 (排母与排针)
 
@@ -192,7 +230,10 @@
 
 - **焊接要点**：排母引脚较多，建议先焊对角线的两个引脚进行定位，确认位置垂直后再焊剩余引脚。
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NzljZTkzNTI3NTZlNGVlMzgzZjMyOThjNjBiNThkNDZfYjgwZTM4M2VhNjJmMTQxZWE0OGI0YmQ1YjYzZDcwODBfSUQ6NzY0NTg5MzkzODczMzIyMzEzMV8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\hanjie2.PNG" />
+</p>
+
 
 ###### 步骤三：焊接接口组件 (电池与电机)
 
@@ -220,7 +261,7 @@
 
 Arduino IDE 是嵌入式开发中最常用的集成开发环境，支持 Windows、macOS 和 Linux 三大主流操作系统。本实验推荐使用 **Arduino IDE 2.x** 版本，相较于 1.x 版本，2.x 版本引入了现代化的编辑器内核，支持自动补全、智能提示、改进的库管理器以及实时串口监视器等功能，能够显著提升开发效率。
 
-XIAO ESP32-S3 的板载包要求版本为 **2.0.8** 及以上才可用。
+当前固件使用 `arduino-esp32 3.3.6` 构建，建议教程与实际编译环境保持同一版本。
 
 - **步骤 1.** 根据你的操作系统下载并安装稳定版本的 Arduino IDE。
 
@@ -236,17 +277,24 @@ https://www.arduino.cc/en/software/
 https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
 ```
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=OGY2MTFkMjEwM2QyOTdkNTcwNjljNTA0OTgyOTFlNzRfZmE3N2FjYWQwYTc3N2JjMzUwZTYwN2RmYjNlNjM1ZmVfSUQ6NzY0NTg5MzkzNzMxOTc5MTgxNl8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\software1.PNG" />
+</p>
+
 
 依次进入 **Tools > Board > Boards Manager...**，在搜索框中输入关键字 **esp32**，选择最新版本的 **esp32** 并安装。
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YzJhMmY0MzcyZjJkYzljNzQ3OTkzYzA1NjQxOGQ1ZjBfYjk5YTM5NzBkNTgyMzQ2NmMxODA2ZDBkYWY1ODMxNTRfSUQ6NzY0NTg5MzkzODU4NjQwNjEwM18xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\software2.PNG" />
+</p>
 
 - **步骤 4.** 选择你的开发板和端口。
 
 在 Arduino IDE 顶部，你可以直接选择端口。它很可能是 COM3 或更高（**COM1** 和 **COM2** 通常保留给硬件串口）。同时，在左侧的开发板中搜索 **xiao**。选择 **XIAO_ESP32S3**。
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MmUxY2UyZjZlYjBjNDM2MzM5MWRiYTZkZjgzMWVjNTNfNzJjNmEyM2E0ZDllM2FiZGI4NTUxMjZjZGMwZjcwMjVfSUQ6NzY0NTg5MzkzNjM3MTk3NzQwNF8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\software3.PNG" />
+</p>
 
 完成以上准备后，你就可以开始为 XIAO ESP32-S3 编写程序并进行编译和上传了。
 
@@ -280,19 +328,29 @@ https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32
 
 - **步骤 2.** 依次进入 **File > Examples > 01.Basics > Blink**，打开该程序。
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=MzlkMjAxMzlkNmM1OWFiOWFmZTYzNWUzZDQyM2QxZTVfOGYxMDk3MmFjMGUzMWVhMjhjOTE3MzNiNDdlMDhkODNfSUQ6NzY0NTg5MzkzNTI3MzIwMDg0NV8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\software4.PNG" />
+</p>
 
 - **步骤 3.** 将开发板型号选择为 **XIAO ESP32-S3**，并选择正确的端口号后上传程序。
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YmVkOTJmNmEwMTIxNWU3NjY4MDFlZDY1MTgzMzUyY2VfMmNkNjc0ZGE3ZTljNjYxYTNjMDhjMWI3MTViNTdmMGRfSUQ6NzY0NTg5MzkzODY5NTQwODg2MF8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\software5.PNG" />
+</p>
 
 当程序成功上传后，你会看到如下输出信息，并且可以观察到 XIAO ESP32-S3 右侧的橙色 LED 正在闪烁。
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=NDQ1MTdhMTZjMTQ5Y2RhYTY4ZDVmYmQwZmQ0MGVlZDRfYmJhNThmYjAwZWJjYTRkNDk1MWM0YmZlNWVkODQyZGNfSUQ6NzY0NTg5MzkzOTQyMTAzOTc5NV8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\software6.PNG" />
+</p>
 
 ##### 1.5 依赖库安装
 
-![Image](https://internal-api-drive-stream.feishu.cn/space/api/box/stream/download/authcode/?code=YzdiNzQ0MDU5YjZiNDg5NjQ1NTQ3ZGU0MTI5ZWQwMWJfZWVjMzAwODMwYmU3YmNhZjA4NjhmMGEzMDQzNDFmNWRfSUQ6NzY0NTg5MzkzNTMwMjU0NDU4MF8xNzgwMjIxMTU1OjE3ODAzMDc1NTVfVjM)
+<p align="center">
+    <img src="img\software7.PNG" />
+</p>
+
+工程依赖 `FlixPeriph`、`SBUS`、`MAVLink` 和 `Adafruit BMP280`。选择 `XIAO_ESP32S3` 后启用 OPI PSRAM，并使用 `max_app_8MB` 分区，以容纳相机、Wi-Fi 和飞控功能。
 
 #### 2. 飞控代码架构解读
 
@@ -302,21 +360,21 @@ https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32
 
 | 文件 | 职责 | 详细介绍 |
 |---|---|---|
-|`proj_op32drone.ino`|主入口|定义 `WIFI_ENABLED`、`OPTICAL_FLOW_ENABLED`，声明全局位姿/光流变量；`setup()` 初始化参数、LED、电机、WiFi、IMU、RC、光流；`loop()` 按不同频率执行估计与控制|
-|`control.ino`|飞控控制|包含 STAB、ALT_HOLD、POS_HOLD、ACRO、AUTO；姿态环、角速度环、定高环、光流定点速度/位置环；支持地面起飞门控和光流失效保护|
-|`estimate.ino`|状态估计|KalmanAngle 姿态估计；ToF 与惯性融合高度；串口光流水平速度估计；地面零速锁定、光流门控、原始光流积分调试量|
-|`flow.ino`|光流 ToF 驱动|`Serial1`，GPIO8 接光流 TX，GPIO7 接光流 RX；解析 0xDF 帧头 19 字节数据包；有效高度 0.3-6.0m；120ms 超时判定失效|
+|`open32drone_v3.ino`|主入口|初始化参数、电机、相机、WiFi、IMU、BMP280、SBUS 和光流；实时循环依次执行采集、估计、控制、电机输出、通信、日志和参数同步|
+|`control.ino`|飞控控制|包含 STAB、ALT_HOLD、POS_HOLD、ACRO、AUTO；姿态/角速度串级控制、ToF 定高和光流位置/速度控制，并统一处理控制接入与复位|
+|`estimate.ino`|状态估计|四元数陀螺积分与门控重力修正；纯 ToF 相对高度及垂直速度；带时延角速度补偿的光流水平速度和位置估计|
+|`flow.ino`|光流 ToF 驱动|`Serial1`，GPIO8 接光流 TX，GPIO7 接光流 RX；解析 0xDF 帧头 19 字节数据包；有效高度 0.05-6.0 m；150 ms 超时判定失效|
 |`imu.ino`|IMU 驱动|MPU9250 I2C，SDA=GPIO2，SCL=GPIO43，400kHz；陀螺静止自学习；六面加速度计标定|
-|`rc.ino`|遥控输入|SBUS，`Serial2` RX=GPIO44，TX=GPIO1；默认 Roll/Pitch/Throttle/Yaw/Mode 通道为 0/1/2/3/6|
+|`rc.ino`|遥控输入|SBUS，`Serial2` RX=GPIO44，TX=GPIO9；默认 Roll/Pitch/Throttle/Yaw/Mode 通道为 0/1/2/3/6|
 |`motors.ino`|电机输出|4 路 LEDC PWM，10kHz、10-bit；GPIO4/3/6/5 对应左后/右后/右前/左前|
-|`wifi.ino`|WiFi 与 UDP|优先连接保存的 STA 网络，其次尝试内置 2.4G 网络；失败后回退 AP `flix/flixwifi`；UDP 14550 用于 MAVLink|
-|`mavlink.ino`|MAVLink 通信|发送 HEARTBEAT、ATTITUDE_QUATERNION、RC_CHANNELS_RAW、ACTUATOR_CONTROL_TARGET、SCALED_IMU；支持 MANUAL_CONTROL、参数读写、解锁、模式切换和日志读取|
-|`cli.ino`|串口命令行|115200bps，同时兼容 UART0 与 ESP32-S3 USB Serial/JTAG；支持参数、姿态、位姿、WiFi、日志、电机、校准、重启等命令|
+|`wifi.ino`|WiFi、UDP 与图传|默认建立 AP `open32drone`，地址 `192.168.4.1`；UDP 14550 用于 MAVLink，HTTP `/stream` 输出 QVGA MJPEG|
+|`mavlink.ino`|MAVLink 通信|发送心跳、姿态、RC、执行器、IMU 和系统状态；支持 MANUAL_CONTROL、参数读写、解锁、外部控制、日志读取和 CLI 透传|
+|`cli.ino`|串口命令行|115200 bps，提供参数、姿态、IMU、RC、光流、定高、电机、网络、日志、校准和系统状态命令|
 |`parameters.ino`|参数存储|使用 ESP32 NVS 命名空间 `flix`；启动时读取已有参数，参数变化后低频写入，避免启动时写满 NVS|
-|`log.ino`|飞行日志|RAM 循环日志，记录姿态、目标、位置、速度、原始光流积分、光流速度和推力|
-|`safety.ino`|安全保护|RC 超时后推力归零并切入 AUTO|
+|`log.ino`|飞行日志|50 Hz、300 样本 RAM 循环日志，记录估计、目标、光流补偿、控制门控、饱和状态和电机输出|
+|`safety.ino`|安全保护|RC 超时后进入平滑下降；AUTO 外部目标超时后立即解除锁定|
 |`led.ino` / `time.ino`|辅助模块|LED 状态指示、`dt` 与 `loopRate` 统计|
-|`pid.h` / `kalman_angle.h` / `lpf.h` / `quaternion.h` / `vector.h` / `util.h`|数学与工具|PID、两状态卡尔曼、一阶低通、四元数、向量、Rate/Delay 等基础工具|
+|`pid.h` / `lpf.h` / `quaternion.h` / `vector.h` / `util.h`|数学与工具|PID、一阶低通、四元数、向量、Rate/Delay 等基础工具|
 
 ##### 2.2 硬件引脚映射
 
@@ -324,12 +382,12 @@ https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32
 
 | 外设 | GPIO | 说明 |
 |---|---|---|
-|I2C SDA|2|MPU9250 数据线，400KHz；GY-91 上的 BMP280 当前固件未使用|
+|I2C SDA|2|MPU9250 与 BMP280 数据线，400 kHz；BMP280 用于诊断，飞行高度来自 ToF|
 |I2C SCL|43|MPU9250 时钟线|
 |光流 RX|8|Serial1 RX，接光流模块 TX。协议：帧头 0xDF，19字节包，115200bps|
 |光流 TX|7|Serial1 TX，接光流模块 RX|
 |SBUS RX|44|Serial2 RX，100Kbps，25字节帧|
-|SBUS TX|1|Serial2 TX|
+|SBUS TX|9|Serial2 TX|
 |LED|21|板载 NEOPIXEL|
 |MOTOR 0|4|LEDC PWM 10KHz → A03400 → 左后（CW）|
 |MOTOR 1|3|右后（CW）|
@@ -343,27 +401,23 @@ https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32
 #define OPTICAL_FLOW_ENABLED 1 // 启用光流传感器
 ```
 
-主循环按功能拆分为多级频率调度。`step()` 负责更新 `dt` 与 `loopRate`，控制部分通过 `Rate` 定时器分层运行：
+主循环保持固定的数据依赖顺序：先采集传感器，再更新时间、估计状态和执行控制，最后输出电机并处理通信与日志。相机 MJPEG 服务运行在较低优先级任务中，飞控 `loopTask` 保持更高优先级：
 
 ```cpp
 void loop() {
-    static Rate pilotRate(80);
-    static Rate positionRate(40);
-    static Rate attitudeRate(150);
-    static Rate innerRate(400);
-
     readIMU();
     step();
     readRC();
     readOpticalFlow();
+    updateBaro();
     estimate();
-    if (pilotRate) controlPilotLoop();
-    if (positionRate) controlPositionLoop();
-    if (attitudeRate) controlAttitudeLoop();
-    if (innerRate) controlRateTorqueLoop();
+    estimateHeight();
+    estimateHorizontalVelocity();
+    control();
     sendMotors();
     handleInput();
     processMavlink();
+    readVoltage();
     logData();
     syncParameters();
 }
@@ -397,45 +451,43 @@ v = flow × (1/10000) × height(m) / dt(s)
 
 - dataValid == true (byte 16 = 245)
 
-- height: 0.3m ~ 6m
+- height: 0.05 m ~ 6 m
 
-- integrationTime: 5000us ~ 100000us
+- integrationTime > 0
 
-- 健康超时：120ms 无有效数据 → unhealthy
+- 健康超时：150 ms 无有效数据 → unhealthy
 
-##### 3.2 姿态解算（kalman_angle.h + estimate.ino）
+##### 3.2 姿态解算（quaternion.h + estimate.ino）
 
-**卡尔曼滤波器**
+**四元数姿态估计**
 
-- **类型**：两状态（Angle + Gyro Bias）
+- 陀螺仪角速度先经过低通滤波，再以旋转向量形式积分到姿态四元数。
 
-- **输入**：加速度计角度（观测值，atan2 计算）+ 陀螺仪角速度（预测值）
+- 落地静止时，加速度计以 `EST_ACC_WEIGHT=0.003` 修正估计重力方向。
 
-- **输出**：滤波角度 angle、无偏角速度 rate、实时零偏 bias
+- 飞行中仅在推力、加速度模长和角速度满足条件时，以较小的 `EST_LVL_WEIGHT=0.0002` 进行重力方向修正。
 
-- **默认参数**：Q_angle=0.001, Q_bias=0.003, R_measure=0.03
-
-- **实例**：Roll 和 Pitch 各一个 KalmanAngle，Yaw 纯积分
+- Roll、Pitch 和 Yaw 统一由四元数表示，避免欧拉角直接积分带来的轴间耦合。
 
 **高度估计**
 
-- ToF 有效时，`position.z` 会向光流模块测得的 `opticalFlowHeight` 收敛。
+- 高度直接来自光流模块内置 ToF，`position.z` 保存滤波后的相对离地高度。
 
-- ToF 暂不可用时，使用世界系垂直加速度进行短时间惯性积分，并对速度做阻尼。
+- 相邻有效样本的高度差用于计算 `velocity.z`，再通过低通滤波抑制测距抖动。
 
-- 低空电机噪声较强时，会降低加速度计对高度和姿态的影响，避免起飞前姿态被震动带偏。
+- 单次高度跳变超过 0.45 m 时只接收 10% 的变化，并将最大高度变化率限制为 2 m/s。
 
-- `position.z < 0` 时强制归零，避免高度估计向地下漂移。
+- 电机停止且 ToF 无效时，高度和垂直速度复位。
 
 **水平速度与位置**
 
-- 光流原始速度先按高度换算，再做陀螺补偿，得到 `flowCompBodyVel`。
+- 光流位移按 ToF 高度和积分时间换算为速度，再使用 40 ms 历史角速度补偿纯旋转串扰，得到 `flowCompBodyVel`。
 
-- `raw_flow pos_xy` 是原始光流速度积分，用于调试传感器方向和比例。
+- 补偿速度依次经过地面偏置学习、三点中值滤波、创新限幅和低通平滑，再转换到世界坐标系。
 
 - 控制用 `velocity.x/y` 和 `position.x/y` 只有在 `flowAirborne=true` 后才更新；未起飞时会进入地面零速锁定，避免地面纹理噪声让定点目标漂移。
 
-- 起飞判定主要由 `armed`、`controlThrottle > FLOW_ARM_T`、`position.z > FLOW_ARM_Z` 决定；默认 `FLOW_ARM_T=0.12`、`FLOW_ARM_Z=0.22`。
+- 起飞判定由解锁、油门大于 0.12、光流数据新鲜和 ToF 有效共同决定，并持续满足 250 ms 后生效。
 
 ##### 3.3 飞行控制（control.ino）
 
@@ -444,17 +496,17 @@ v = flow × (1/10000) × height(m) / dt(s)
 | 模式 | 值 | 行为 |
 |---|---|---|
 |STAB|2|默认。油门直通+姿态自稳。RC 摇杆映射角度指令。|
-|ALT_HOLD|4|定高模式。油门中位附近保持当前高度，推高/拉低转换为爬升/下降速度目标。默认 `ALT_HOVER=0.45`、`ALT_P=1.00`、`ALT_V_P=0.50`|
-|POS_HOLD|5|定点模式。在光流健康、已起飞、高度足够、姿态不过度倾斜时打开位置门控；松杆锁定当前位置，动杆接管并刷新目标|
+|ALT_HOLD|4|ToF 定高模式。进入后记录当前高度，飞手油门作为基础推力，高度 PID 在其上叠加修正。|
+|POS_HOLD|5|光流定点模式。定高接入且光流、ToF、姿态和偏航条件满足后锁定当前位置；移动 Roll/Pitch 摇杆时平移目标点。|
 |ACRO|1|角速度控制模式，直接把摇杆映射到角速度目标|
 |AUTO|3|MAVLink 外部控制模式，可接收 SET_ATTITUDE_TARGET 或 SET_ACTUATOR_CONTROL_TARGET|
 
 **模式切换（RC 通道 6）**
 
 ```cpp
-ch6 < 33%  → STAB
-ch6 33~66% → ALT_HOLD
-ch6 > 66%  → POS_HOLD
+ch6 < 25%       → STAB
+ch6 25% ~ 75%  → ALT_HOLD
+ch6 > 75%      → POS_HOLD
 ```
 
 **解锁/上锁**
@@ -468,14 +520,15 @@ ch6 > 66%  → POS_HOLD
 
 | 参数 | 默认值 | 说明 |
 |---|---:|---|
-|`ALT_HOVER`|0.45|悬停油门基准，定高是否稳住首先取决于该值|
-|`ALT_P` / `ALT_I` / `ALT_V_P`|1.00 / 0.010 / 0.50|高度误差到速度目标、积分补偿、垂直速度阻尼|
-|`POS_P` / `POS_V_MAX`|0.25 / 0.12|位置误差到水平速度目标，以及最大水平速度限制|
-|`HOLD_P_X/Y`|0.015 / 0.014|光流速度闭环比例项|
-|`HOLD_I_X/Y`|0.006 / 0.006|速度闭环积分项|
-|`HOLD_D_X/Y`|0.0010 / 0.0010|速度闭环微分刹车项|
-|`HOLD_A_MAX`|0.04 rad|定点控制最大倾角输出|
-|`POS_MIN_Z`|0.22 m|定点门控最低高度|
+|定高 PID|P=0.8, I=0.1, D=0.2|编译常量；修正量限制为 ±0.2，积分限制为 ±0.3|
+|`POS_HOLD_P`|0.50|位置误差到水平速度目标的比例增益|
+|`POS_STICK_V`|0.50 m/s|Roll/Pitch 满杆对应的目标点移动速度|
+|`POS_VEL_P_X/Y`|0.20 / 0.20|水平速度闭环比例增益|
+|`POS_VEL_I_X/Y`|0 / 0|水平速度闭环积分增益|
+|`POS_VEL_D_X/Y`|0 / 0|水平速度闭环微分增益|
+|`POS_CMD_RATE`|1.20 rad/s|定点姿态指令变化率限制|
+|`FLOW_GYRO_P/R`|-0.78 / -0.77|Pitch/Roll 旋转光流补偿系数|
+|`FLOW_GYRO_DLY`|40 ms|光流与角速度的时间对齐|
 
 ##### 3.4 MAVLink 调试（mavlink.ino）
 
@@ -483,8 +536,9 @@ ch6 > 66%  → POS_HOLD
 
 | 消息 | 频率 | 说明 |
 |---|---|---|
-|HEARTBEAT (#0)|1 Hz|type=QUADROTOR, autopilot=GENERIC, base_mode=armed/disarmed|
-|EXTENDED_SYS_STATE|1 Hz|上报 landed / in-air 状态|
+|HEARTBEAT (#0)|2 Hz|type=QUADROTOR, autopilot=GENERIC, base_mode=armed/disarmed|
+|EXTENDED_SYS_STATE|2 Hz|上报 landed / in-air 状态|
+|BATTERY_STATUS|2 Hz|上报电池字段；启用电压采样引脚后使用|
 |ATTITUDE_QUATERNION|10 Hz|四元数姿态与角速度，按 MAVLink FRD 坐标约定转换|
 |RC_CHANNELS_RAW (#35)|~10 Hz|16 通道原始 PWM 值|
 |ACTUATOR_CONTROL_TARGET|10 Hz|当前 4 路电机归一化输出|
@@ -497,14 +551,14 @@ ch6 > 66%  → POS_HOLD
 |MANUAL_CONTROL|外部手动控制，映射到油门、俯仰、横滚、偏航|
 |PARAM_REQUEST_LIST / PARAM_REQUEST_READ / PARAM_SET|参数读取与设置|
 |MAV_CMD_COMPONENT_ARM_DISARM|MAVLink 解锁/上锁，油门高于 0.05 时拒绝解锁|
-|MAV_CMD_DO_SET_MODE|切换 `RAW/ACRO/STAB/AUTO/ALT_HOLD/POS_HOLD`|
+|MAV_CMD_DO_SET_MODE|切换 `RAW/ACRO/STAB/AUTO`；定高与定点由 RC 三段开关选择|
 |SET_ATTITUDE_TARGET|AUTO 模式下接收姿态、角速度和推力目标|
 |SET_ACTUATOR_CONTROL_TARGET|AUTO 模式下直接接收电机控制量|
 |SERIAL_CONTROL|通过 MAVLink 透传 CLI 命令|
 
 ##### 3.5 ROS2/MAVROS 接入说明
 
-当前 `proj_op32drone` 固件侧只负责 MAVLink v2 的 UDP 收发，不内置 ROS 2 节点；ROS 2 接入需要在上位机侧通过 MAVROS 或自定义 MAVLink 程序连接飞控 UDP 14550。飞控默认会优先连接保存的 2.4G WiFi；连接失败才回退 AP `flix/flixwifi`，AP 模式下飞控地址为 `192.168.4.1`。如果飞控已接入路由器 STA 网络，应以串口 `wifi` 命令打印出的 `STA IP` 为准。
+仓库中的 `ros2_open32drone` 功能包在上位机运行，通过 MAVROS 连接飞控 UDP 14550，并将板载相机的 MJPEG 视频发布为 ROS 2 图像话题。飞控默认建立 AP `open32drone`，密码 `12345678`，地址为 `192.168.4.1`。
 
 **架构**
 
@@ -536,9 +590,7 @@ ComponentContainer("open32drone")
 
 **插件白名单**
 
-启用的 MAVROS 插件：sys_status / command / param / manual_control / imu
-
-command_long 和 rc_io 已被注释。command_long 用于复杂命令（航点/相机），rc_io 用于 RC 覆写。如需这些功能取消注释即可。
+启用的 MAVROS 插件：sys_status / command / param / manual_control / imu。`open32drone.launch.py` 还会启动 MJPEG 相机节点，发布 `image_raw` 与 `image_raw/compressed`。
 
 **IMU 噪声参数**
 
@@ -603,8 +655,6 @@ ros2 service call /osdrone/arming mavros_msgs/srv/CommandBool "{value: false}"
 |ACRO|1.0|`ros2 service call /osdrone/command mavros_msgs/srv/CommandLong "{command:176,param1:1.0,param2:1.0}"`|
 |STAB|2.0|`ros2 service call /osdrone/command mavros_msgs/srv/CommandLong "{command:176,param1:1.0,param2:2.0}"`|
 |AUTO|3.0|`ros2 service call /osdrone/command mavros_msgs/srv/CommandLong "{command:176,param1:1.0,param2:3.0}"`|
-|ALT_HOLD|4.0|`ros2 service call /osdrone/command mavros_msgs/srv/CommandLong "{command:176,param1:1.0,param2:4.0}"`|
-|POS_HOLD|5.0|`ros2 service call /osdrone/command mavros_msgs/srv/CommandLong "{command:176,param1:1.0,param2:5.0}"`|
 
 **参数读写**
 
@@ -631,9 +681,9 @@ type 对应 MAVLink MAV_PARAM_TYPE：1=uint8, 2=int8, 3=uint16, 4=int16, 5=uint3
 
 - ManualControl 每 `--once` 只发一帧，需要代码循环才能持续控制
 
-- 油门 z 范围 [0, 1000]，对应飞控中 0~100% 推力。当前 `ALT_HOVER=0.45`，约对应 z=450
+- 油门 z 范围 [0, 1000]，对应飞控中 0~100% 推力
 
-- 俯仰/横滚 [-1000, 1000] 映射到最大倾角 `CTL_TILT_MAX`（默认约 25°）；偏航映射到 `CTL_Y_RATE_MAX`
+- 俯仰/横滚 [-1000, 1000] 映射到最大倾角 `CTL_TILT_MAX`（默认 30°）；偏航映射到 `CTL_Y_RATE_MAX`
 
 - 切换模式后需等待心跳确认，QGC 或 `ros2 topic echo /osdrone/state` 可查看当前模式
 
@@ -646,25 +696,22 @@ USB 串口 115200bps，当前 `cli.ino` 同时兼容 UART0 与 ESP32-S3 USB Seri
 | 命令 | 输出内容 | 典型用途 |
 |---|---|---|
 | `help` | 全部命令 | 查看当前固件支持的 CLI |
-| `p` / `p <name>` / `p <name> <value>` | 参数列表、单参数、写参数 | 调 PID、光流比例、悬停油门；电机未转时会由 `syncParameters()` 保存到 NVS |
+| `p` / `p <name>` / `p <name> <value>` | 参数列表、单参数、写参数 | 调 PID、估计器和光流参数；电机未转时保存到 NVS |
 | `ps` / `psq` | 欧拉角 / 四元数 | 快速确认姿态方向 |
-| `pose` / `pose <hz>` / `poseoff` | 姿态、位置、速度、光流门控、原始光流积分 | 总览位姿是否可信 |
-| `flowraw` / `flowraw <hz>` | 光流测量速度、陀螺补偿速度、补偿后速度、bias、innovation | 判断光流方向、比例、陀螺补偿是否正确 |
-| `flowctrl` / `flowctrl <hz>` | `stationary/air/zero/use/gate/reject`、控制用位置/速度、高度目标 | 判断 POS_HOLD 为什么不开门控或 XY 为什么不更新 |
-| `rate` / `rate <hz>` | 角速度、角速度目标、力矩输出、PID 参数 | 调姿态环和角速度环 |
-| `mot` / `mot <hz>` | 四电机输出、左右/前后差分、推力目标、力矩目标 | 检查混控方向、电机方向和姿态修正方向 |
-| `diag` / `diag <hz>` | 加速度模长、震动、加速度计信任度、姿态观测角、陀螺状态 | 判断 IMU 震动、起飞地面效应和估计器健康 |
-| `monoff` / `flowoff` / `rateoff` / `motoff` / `diagoff` | 停止滚动监视器 | 防止串口刷屏 |
-| `monpause` / `monresume` | 暂停/恢复当前滚动监视器 | 调参时临时停住输出 |
-| `imu` | IMU 状态、校准值、原始加速度计和陀螺仪 | 检查传感器与六面标定 |
+| `imu` | IMU、校准值和 landed 状态 | 检查传感器与六面标定 |
+| `rc` | 16 通道、归一化输入、模式和解锁状态 | 检查 SBUS 映射和三段开关 |
+| `flow` | ToF、光流速度、角速度补偿、位置、门控和拒绝码 | 检查定点估计链 |
+| `alt` | 定高接入、目标高度、ToF 高度、推力和拒绝码 | 检查定高控制链 |
+| `mot` | 四路电机输出 | 检查电机映射与混控方向 |
+| `time` | 循环频率、平均/最大周期和 overrun | 检查实时循环负载 |
 | `ca` / `cr` | 加速度计六面标定 / SBUS 遥控器标定 | 首次装机或重装后使用 |
-| `wifi` / `wifiscan` | WiFi/AP/STA/MAVLink 状态，附近网络 | 排查连接问题 |
-| `wifi <ssid> <password>` / `wifi reset` | 保存网络 / 清除保存网络 | 切换路由器或密码 |
+| `wifi` | AP/STA、IP、客户端和 MAVLink 状态 | 检查网络连接 |
+| `ap <ssid> <password>` | 保存 AP 名称和密码 | 修改无线网络配置，重启后生效 |
 | `arm` / `disarm` | 串口解锁 / 上锁 | 拆桨调试用 |
-| `raw` / `stab` / `acro` / `auto` / `alt` / `pos` | 手动切换模式 | 室内调试时快速切模式 |
+| `raw` / `stab` / `acro` / `auto` | 手动切换调试模式 | 串口调试控制链 |
 | `mfr` / `mfl` / `mrr` / `mrl` | 单电机测试 | 必须拆桨，用于确认电机序号 |
 | `log` / `log dump` | RAM 日志表头 / CSV 数据 | 飞后分析姿态、速度、位置和光流 |
-| `sys` / `reboot` | 系统信息 / 重启 | 查看堆内存、芯片温度或软重启 |
+| `sys` / `reset` / `reboot` | 系统信息 / 姿态复位 / 重启 | 查看运行状态和维护固件 |
 
 #### 4. 调参建议
 
@@ -674,14 +721,13 @@ USB 串口 115200bps，当前 `cli.ino` 同时兼容 UART0 与 ESP32-S3 USB Seri
 
 | 阶段 | 推荐命令 | 关注字段 | 判断标准 |
 |---|---|---|---|
-| 上电静止 | `diag 5` | `accNorm`、`vibe`、`trust`、`bias` | 静止时 `accNorm` 接近 9.8，`vibe` 不应很大，`trust` 不应长期接近 0 |
-| 手持倾斜 | `pose 5` | `att_deg r/p/y` | 向右倾 Roll 方向、向前倾 Pitch 方向应符合机体定义 |
-| 手持平移 | `flowraw 10` | `body_vel`、`comp`、`pos_xy` | 向前/向右移动时光流方向应与实际运动方向一致 |
-| 解锁低油门 | `mot 10` | `FL/FR/RL/RR`、`LRdiff`、`FBdiff` | 姿态修正时电机差分方向正确，没有某一路异常饱和 |
-| STAB 低空 | `rate 10` | `cur/tgt/tq` | 角速度能跟随目标，力矩输出不过度抖动 |
-| ALT_HOLD | `pose 10`、`flowctrl 10` | `pos.z`、`vel.z`、`targetZ`、`vzT` | 高度围绕目标收敛，不持续上飘或下沉 |
-| POS_HOLD | `flowctrl 10`、`flowraw 10` | `air/use/gate/rej`、`position.x/y` | `air=1`、`use=1`、`gate=1` 后 XY 才会进入控制闭环 |
-| 飞后分析 | `log dump` | `position`、`velocity`、`rawFlowPos`、`flowCompVel`、`thrustTarget` | 将输出保存为 CSV，用表格或绘图工具看趋势 |
+| 上电静止 | `imu`、`ps` | 加速度计、角速度和姿态 | 机体静止时输出稳定，手持倾斜方向与机体一致 |
+| 遥控检查 | `rc` | 通道、归一化输入、模式和 armed | 摇杆及三段开关映射正确 |
+| 手持平移/旋转 | `flow` | RawVel、Filtered body、Gyro apparent、Position | 平移方向正确；原地旋转时补偿后速度接近零 |
+| 电机映射 | `mfr/mfl/mrr/mrl` | 对应电机 | 四个命令与机体电机位置一致，必须拆桨 |
+| STAB 低空 | `log dump` | rates、ratesTarget、attitude、motor | 角速度和姿态跟随目标，电机没有持续饱和 |
+| ALT_HOLD | `alt`、`log dump` | Target、Alt(TOF)、velocity.z、altReject | 高度围绕进入模式时的目标收敛 |
+| POS_HOLD | `flow`、`log dump` | UsingFlow、PosGate、HoldGate、Locked、position.x/y | 门控和锁点建立后位置控制生效 |
 
 ##### 4.2 基础姿态环
 
@@ -692,14 +738,14 @@ USB 串口 115200bps，当前 `cli.ino` 同时兼容 UART0 与 ESP32-S3 USB Seri
 
 ##### 4.3 定高
 
-定高优先调 `ALT_HOVER`。如果悬停油门不准，`ALT_P` 和 `ALT_V_P` 再怎么调也会很吃力。
+当前定高采用“飞手基础油门 + PID 修正”。先在 `STAB` 中找到接近悬停的油门，再以相近油门切入 `ALT_HOLD`；高度目标在模式接入时自动记录。
 
 | 现象 | 优先调整 |
 |---|---|
-| 切入 `ALT_HOLD` 后缓慢下沉 | 增大 `ALT_HOVER` |
-| 切入 `ALT_HOLD` 后缓慢上飘 | 减小 `ALT_HOVER` |
-| 高度上下震荡 | 降低 `ALT_P`，或略增 `ALT_V_P` |
-| 高度响应迟钝 | 略增 `ALT_P`，确认 ToF 高度稳定 |
+| 切入 `ALT_HOLD` 后修正量不足 | 将基础油门保持在接近悬停位置 |
+| 高度上下震荡 | 检查 ToF 反射面，并适当降低定高 P/D 编译常量 |
+| 高度响应迟钝 | 确认 `alt` 中 `AltHold=1`，再适当增加定高 P 编译常量 |
+| 无法接入定高 | 查看 `alt` 的 `Reject` 和 ToF 高度 |
 
 ##### 4.4 光流方向与定点
 
@@ -707,20 +753,19 @@ USB 串口 115200bps，当前 `cli.ino` 同时兼容 UART0 与 ESP32-S3 USB Seri
 
 | 字段 | 含义 |
 |---|---|
-| `flowraw meas` | 光流模块原始速度换算值 |
-| `flowraw comp` | 扣除机体转动影响后的速度 |
-| `flowraw pos_xy` | 原始光流积分，只用于判断方向和比例 |
-| `flowctrl pos/vel` | 飞控控制用 XY 位置/速度 |
-| `flowctrl air/use/gate` | 是否已起飞、是否使用光流、POS_HOLD 门控是否打开 |
+| `flow` 中的 `RawVel` | 光流模块原始轴向速度 |
+| `Filtered body` | 角速度补偿和滤波后的机体系速度 |
+| `Gyro apparent` | 机体旋转在光流中产生的表观速度 |
+| `Position X/Y` | 飞控积分的水平相对位置 |
+| `UsingFlow/PosGate/HoldGate/Locked` | 光流使用、位置估计和定点控制状态 |
 
 校准顺序：
 
-1. 拆桨，手持平移，运行 `flowraw 10`。
-2. 如果 `pos_xy` 方向反了，优先检查光流模块安装方向，其次调整 `FLOW_SCL_X/Y` 符号。
-3. 如果手持原地俯仰/横滚时 `comp` 明显漂移，微调 `FLOW_K_PIT` / `FLOW_K_ROL`。
-4. STAB 已经稳后，再低空短切 `POS_HOLD`，运行 `flowctrl 10`。
-5. 只有 `air=1`、`use=1`、`gate=1` 后，`position.x/y` 才是参与定点控制的 XY。
-6. 定点横向发散时先切回 `STAB`，不要在发散状态继续加大 `HOLD_P_X/Y`。
+1. 拆桨，手持前后和左右平移，每个方向执行一次 `flow`，确认速度符号。
+2. 原地俯仰和横滚后执行 `flow`，观察 `Filtered body` 是否接近零；需要时调整 `FLOW_GYRO_P/R` 和 `FLOW_GYRO_DLY`。
+3. 完成 STAB 与 ALT_HOLD 检查后，再低空切入 `POS_HOLD`。
+4. 使用 `flow` 查看 `UsingFlow`、`PosGate`、`HoldGate` 和 `Locked`，使用 `log dump` 分析连续过程。
+5. 定点横向发散时切回 `STAB`，先检查方向和旋转补偿，再调整 `POS_HOLD_P` 与 `POS_VEL_P_X/Y`。
 
 ##### 4.5 RAM 日志
 
@@ -733,26 +778,27 @@ USB 串口 115200bps，当前 `cli.ino` 同时兼容 UART0 与 ESP32-S3 USB Seri
 | 姿态 | `attitude.x/y/z`、`attitudeTarget.x/y/z` |
 | 控制用位置 | `position.x/y/z` |
 | 控制用速度 | `velocity.x/y/z` |
-| 原始光流 | `rawFlowPos.x/y`、`rawBodyVel.x/y` |
-| 补偿光流 | `flowCompVel.x/y` |
-| 推力 | `thrustTarget` |
+| 光流链 | `flowRaw.x/y`、`flowComp.x/y`、`flowFilt.x/y`、`flowGyro.x/y` |
+| 位置控制 | `targetPosX/Y`、`targetVel.x/y`、`velError.x/y`、`posRollCmd`、`posPitchCmd` |
+| 门控与诊断 | `flowAgeMs`、`flowPosGate`、`posHoldGate`、`flowReject`、`posReject`、`altReject` |
+| 控制输出 | `thrustTarget`、`motor.rl/rr/fr/fl`、`posSaturated`、`motorSaturated` |
 
-建议把 `log dump` 输出保存为 `.csv`，用表格或 Python/Matlab 绘制 `position.z`、`velocity.z`、`position.x/y`、`rawFlowPos.x/y`、`flowCompVel.x/y`。这样比只看飞行视频更容易定位是高度环、光流方向、速度闭环还是门控问题。
+日志以 50 Hz 保存最近约 6 秒的飞行数据。解除锁定后执行 `log dump`，用表格或 Python/Matlab 绘制姿态、高度、光流、位置目标、控制指令和电机输出。
 
 #### 5. 故障排查表
 
 | 现象 | 可能原因 | 解决方法 |
 |---|---|---|
 |起飞即翻|桨叶方向错误|检查 X 布局：对角线同向，相邻反向|
-|STAB 稳但 XY 漂移|未进入 POS_HOLD 或光流门控未打开|串口 `flowctrl 10` 查看 `air/use/gate/rej`，确认油门、高度和光流健康|
-|定点越修越跑|光流 X/Y 方向、比例或陀螺补偿方向错误|手持测试 `flowraw 10`，必要时调整 `FLOW_SCL_X/Y`、`FLOW_K_PIT/ROL`|
-|高度波动大|`ALT_HOVER` 不准、ToF 数据抖动或地面反射差|先调 `ALT_HOVER`，再微调 `ALT_P`、`ALT_V_P`|
-|悬停震荡|位置/速度环增益过大|降低 `HOLD_P_X/Y` 或 `HOLD_A_MAX`|
-|电机输出明显偏一侧|混控方向、电机顺序或姿态估计方向错误|拆桨运行 `mot 10`，轻轻倾斜机体，确认修正方向正确|
-|姿态环抖动|机架震动、D 项过大或 IMU 信任度下降|运行 `rate 10` 和 `diag 10`，看 `tq`、`vibe`、`trust`|
+|STAB 稳但 XY 漂移|未进入 POS_HOLD 或光流门控未打开|串口 `flow` 查看 `UsingFlow/PosGate/HoldGate/Locked` 和拒绝码|
+|定点越修越跑|光流 X/Y 方向或角速度补偿错误|手持平移和原地旋转后执行 `flow`，检查 RawVel 与 Filtered body|
+|高度波动大|ToF 数据抖动、反射面不合适或定高增益偏大|运行 `alt` 并结合日志检查 `flowHeight`、`position.z` 和 `velocity.z`|
+|悬停震荡|位置/速度环增益过大|降低 `POS_HOLD_P` 或 `POS_VEL_P_X/Y`|
+|电机输出明显偏一侧|混控方向、电机顺序或姿态估计方向错误|拆桨依次执行四个单电机测试命令，并在日志中确认修正方向|
+|姿态环抖动|机架震动或角速度环 D 项过大|检查机架与桨叶，并结合 `log dump` 分析 rates 和 motor 输出|
 |解锁失败|RC 信号异常或油门未归零|检查 SBUS 接线，串口 `rc` 查看通道值|
-|WiFi 连不上|旧 NVS 凭据、5GHz/加密不兼容或信号弱|执行 `wifi reset`、`wifiscan`，确认 2.4G SSID、WPA2/WPA2-WPA3 mixed|
-|MAVROS 连不上|飞控 IP 或 UDP 端口错误|AP 模式使用 192.168.4.1，STA 模式用串口 `wifi` 输出的 `STA IP`，端口 14550|
+|WiFi 连不上|SSID/密码设置错误或供电不稳|连接默认 AP `open32drone`；修改凭据时使用 `ap <ssid> <password>` 并重启|
+|MAVROS 连不上|电脑未连接飞控 AP，或 IP/UDP 端口错误|确认飞控地址为 192.168.4.1、端口为 14550，并用 `wifi` 查看状态|
 
 ## 三、其他补充内容
 

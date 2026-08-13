@@ -14,14 +14,17 @@ MPU9250 imu(Wire);
 #define I2C_SDA 2
 #define I2C_SCL 43
 
-Vector imuRotation(PI, 0, -PI / 2); // imu orientation as Euler angles
+Vector imuRotation(PI, 0, PI / 2); // imu orientation as Euler anglesS
 
 Vector gyro; // gyroscope output, rad/s
 Vector gyroBias;
 
-Vector acc; // accelerometer output, m/s/s
+Vector acc; // filtered accelerometer output, m/s/s
+Vector accRaw; // calibrated body-frame sample before software filtering
 Vector accBias;
 Vector accScale(1, 1, 1);
+LowPassFilter<Vector> gyroBiasFilter(0.001); // global for IMU_GYRO_BIAS_A param
+LowPassFilter<Vector> accFilter(0.02f); // rejects motor/prop vibration before attitude/height estimation
 
 void setupIMU() {
   print("Setup IMU\n");
@@ -42,9 +45,10 @@ void setupIMU() {
 void configureIMU() {
   imu.setAccelRange(imu.ACCEL_RANGE_4G);
   imu.setGyroRange(imu.GYRO_RANGE_2000DPS);
-  imu.setDLPF(imu.DLPF_MAX);
+  imu.setDLPF(imu.DLPF_50HZ_APPROX);
   imu.setRate(imu.RATE_1KHZ_APPROX);
   imu.setupInterrupt();
+  accFilter.reset();
 }
 
 void readIMU() {
@@ -59,13 +63,14 @@ void readIMU() {
   Quaternion rotation = Quaternion::fromEuler(imuRotation);
   acc = Quaternion::rotateVector(acc, rotation.inversed());
   gyro = Quaternion::rotateVector(gyro, rotation.inversed());
+  accRaw = acc;
+  acc = accFilter.update(accRaw);
 }
 
 void calibrateGyroOnce() {
   static Delay landedDelay(2);
   if (!landedDelay.update(landed)) return; // calibrate only if definitely stationary
 
-  static LowPassFilter<Vector> gyroBiasFilter(0.001);
   gyroBias = gyroBiasFilter.update(gyro);
 }
 
@@ -136,7 +141,8 @@ void printIMUInfo() {
   print("who am I: 0x%02X\n", imu.whoAmI());
   print("rate: %.0f\n", loopRate);
   print("gyro: %f %f %f\n", rates.x, rates.y, rates.z);
-  print("acc: %f %f %f\n", acc.x, acc.y, acc.z);
+  print("acc filtered: %f %f %f (norm %.2f)\n", acc.x, acc.y, acc.z, acc.norm());
+  print("acc body raw: %f %f %f (norm %.2f)\n", accRaw.x, accRaw.y, accRaw.z, accRaw.norm());
   imu.waitForData();
   Vector rawGyro, rawAcc;
   imu.getGyro(rawGyro.x, rawGyro.y, rawGyro.z);

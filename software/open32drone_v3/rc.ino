@@ -7,7 +7,7 @@
 #include "util.h"
 
 // osrbot PIN_MAP 
-SBUS rc(Serial2,44,1); // NOTE: Use RC(Serial2, Rx, Tx)
+SBUS rc(Serial2,44,9); // NOTE: Use RC(Serial2, Rx, Tx)
 
 uint16_t channels[16]; // raw rc channels
 float controlTime; // time of the last controls update
@@ -23,11 +23,6 @@ float controlMode = NAN;
 void setupRC() {
 	print("Setup RC\n");
 	rc.begin();
-	rollChannel = 0;
-  pitchChannel = 1;
-  throttleChannel = 2; 
-  yawChannel = 3;
-  modeChannel = 6;
 }
 
 bool readRC() {
