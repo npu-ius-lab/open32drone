@@ -13,9 +13,9 @@
 
 ## 1. Project Overview
 
-**Open32drone** is a high-performance, low-cost, research-and-education-grade open-source micro drone platform based on **ESP32-S3**.
+**Open32Drone Minimal** is an open-source ESP32-S3 micro-UAV platform for research, education, embedded flight-control development, and low-altitude robotics experiments.
 
-This project is developed from the open-source [Flix](https://github.com/okalachev/flix/tree/master) project. It keeps the original lightweight code architecture and adds optical-flow and ToF sensors, enabling indoor position hold and altitude hold. Open32drone supports MAVLink and ROS integration, and aims to provide developers with a low-cost, highly extensible micro aerial vehicle platform for learning drone control theory, validating swarm algorithms, and researching indoor navigation.
+The platform integrates inertial sensing, optical flow/ToF, SBUS, four brushed-motor drivers, Wi-Fi/MAVLink, and ROS 2 interfaces in a lightweight embedded architecture. A single ESP32-S3 executes attitude stabilization, assisted takeoff and landing, low-altitude altitude/position hold, and external position or velocity control. The carrier board, sensor timing, relative-state estimator, progressive control stack, and companion applications form one matched system implementation.
 
 ## 2. Project Tutorial
 
@@ -63,13 +63,13 @@ Required: 4
 
 Reference price: 24 RMB for 4 pieces
 
-##### IMU Module, 10-Axis Sensor
+##### IMU Module
 
 <p align="center">
     <img src="img\imu.PNG" />
 </p>
 
-Model: GY-91 nine-axis MPU9250 + BMP280 barometer
+Model: GY-91 module with MPU9250 and BMP280. The current flight configuration disables the BMP280; attitude uses the MPU9250 and altitude hold uses the optical-flow module's ToF sensor.
 
 Required: 1
 
@@ -281,7 +281,7 @@ https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32
     <img src="img\software1.PNG" />
 </p>
 
-Go to **Tools > Board > Boards Manager...**, enter **esp32** in the search box, select the latest **esp32** package, and install it.
+Go to **Tools > Board > Boards Manager...**, enter **esp32** in the search box, and install **esp32 3.3.6**, matching the project validation environment.
 
 <p align="center">
     <img src="img\software2.PNG" />
@@ -349,31 +349,39 @@ After the program is uploaded successfully, you will see the following output, a
     <img src="img\software7.PNG" />
 </p>
 
-The sketch depends on `FlixPeriph`, `SBUS`, `MAVLink`, and `Adafruit BMP280`. Select `XIAO_ESP32S3`, enable OPI PSRAM, and use the `max_app_8MB` partition for the camera, Wi-Fi, and flight-control stack.
+The standard build uses Arduino-ESP32 `3.3.6`, `FlixPeriph 1.10.4`, `MAVLink 2.0.25`, and SBUS. Select `XIAO_ESP32S3`, enable OPI PSRAM, and use the `default_8MB` A/B application partition with DIO Flash. The default IMU backend supports MPU6500/MPU9250; ICM20948 and MPU6050 are separate compile configurations that require their own validation. Minimal has no barometer-control path.
 
 #### 2. Flight-Control Firmware Architecture
 
-##### 2.1 File Structure Overview
+This section gives the shortest development path. See [Firmware Architecture](docs/FIRMWARE_ARCHITECTURE.md) for the complete module map, ownership model, background-service boundary, and source reading order.
 
-The firmware in this experiment is developed from the Flix architecture and adds serial optical-flow ToF, altitude hold, position hold, MAVLink UDP, serial CLI, and NVS parameter persistence. The following table lists the current source files and their responsibilities:
+##### 2.1 Runtime Structure
 
-| File | Responsibility | Details |
+The firmware does not assign one flight task to every subsystem. Flight-critical work remains in the fixed 300 Hz high-priority `loopTask`: sensor acquisition, state estimation, target selection, control, and motor output execute in a fixed dependency order. CLI, MAVLink, and OTA boot validation are rate-limited inside that loop; the optional camera and MJPEG HTTP service run in a low-priority core-0 background task and never own control.
+
+```mermaid
+flowchart LR
+  INPUT["imu · rc · flow"] --> EST["estimate"]
+  EST --> SAFE["safety · ownership"]
+  SAFE --> CTRL["auto · altitude · position · attitude · rate"]
+  CTRL --> MOTOR["mix · PWM"]
+  MOTOR --> SERVICE["CLI · MAVLink · log · NVS"]
+  CAMERA["OV3660"] --> STREAM["lower-priority HTTPD video task"]
+```
+
+| Layer | Files | Code boundary |
 |---|---|---|
-| `open32drone_v3.ino` | Main entry point | Initializes parameters, motors, camera, Wi-Fi, IMU, BMP280, SBUS, and optical flow; runs acquisition, estimation, control, motor output, communication, logging, and parameter sync in order |
-| `control.ino` | Flight control | Contains STAB, ALT_HOLD, POS_HOLD, ACRO, and AUTO; cascaded attitude/rate control, ToF altitude hold, optical-flow position/velocity control, and engagement/reset logic |
-| `estimate.ino` | State estimation | Quaternion gyro integration with gated gravity correction; direct ToF height and vertical speed; optical-flow horizontal velocity and position with delayed angular-rate compensation |
-| `flow.ino` | Optical-flow ToF driver | Uses `Serial1`; GPIO8 connects to optical-flow TX and GPIO7 to optical-flow RX; parses 19-byte packets beginning with 0xDF; valid height is 0.05-6.0 m; a 150 ms timeout marks data stale |
-| `imu.ino` | IMU driver | MPU9250 over I2C, SDA=GPIO2, SCL=GPIO43, 400 kHz; gyro static self-learning; six-face accelerometer calibration |
-| `rc.ino` | RC input | SBUS over `Serial2`, RX=GPIO44, TX=GPIO9; default Roll/Pitch/Throttle/Yaw/Mode channels are 0/1/2/3/6 |
-| `motors.ino` | Motor output | Four LEDC PWM outputs, 10 kHz, 10-bit; GPIO4/3/6/5 correspond to rear-left/rear-right/front-right/front-left |
-| `wifi.ino` | Wi-Fi, UDP, and video | Creates AP `open32drone` at `192.168.4.1`; UDP 14550 carries MAVLink and HTTP `/stream` serves QVGA MJPEG |
-| `mavlink.ino` | MAVLink communication | Sends heartbeat, attitude, RC, actuator, IMU, and system state; supports MANUAL_CONTROL, parameters, arming, offboard control, log access, and CLI passthrough |
-| `cli.ino` | Serial command line | Runs at 115200 bps and provides parameter, attitude, IMU, RC, flow, altitude, motor, network, log, calibration, and system commands |
-| `parameters.ino` | Parameter storage | Uses ESP32 NVS namespace `flix`; reads existing parameters at boot and writes changes at low frequency to avoid filling NVS during startup |
-| `log.ino` | Flight log | 50 Hz, 300-sample RAM circular log recording estimates, targets, flow compensation, control gates, saturation, and motor output |
-| `safety.ino` | Safety protection | Enters a smooth descent after RC timeout and disarms on an AUTO offboard-target timeout |
-| `led.ino` / `time.ino` | Helper modules | LED status indication, `dt`, and `loopRate` statistics |
-| `pid.h` / `lpf.h` / `quaternion.h` / `vector.h` / `util.h` | Math and utilities | PID, first-order low-pass filter, quaternion, vector, Rate/Delay, and utility functions |
+|Entry and scheduling|`firmware.ino`, `time.ino`|Build switches, startup order, 64-bit monotonic time, main loop, and task priorities|
+|Inputs|`imu_backend.h`, `imu.ino`, `rc.ino`, `flow.ino`|Compile-time selected IMU, SBUS, and TF-0850 packets with separate ToF and XY-flow sequences, timestamps, and health states|
+|Estimation|`estimate.ino`|Attitude, ToF height/vertical speed, and horizontal velocity/relative position with angular-rate time alignment|
+|Control|`control.ino`, `control_modes.ino`, `control_offboard.ino`, `control_auto_flight.ino`, `control_altitude.ino`, `control_position.ino`, `control_stabilization.ino`|Shared state plus ownership, Offboard, automatic flight, altitude, position, attitude, and rate layers|
+|Safety and power|`safety.ino`, `power.ino`|Arm checks, link-loss descent, sustained-tip motor stop, battery voltage, and hover-thrust feedforward|
+|Actuation|`motors.ino`|Quad-X mapping and four LEDC PWM outputs|
+|Communications|`mavlink.ino`, `wifi.ino`, `camera.ino`, `ota.ino`|MAVLink, AP/STA networking, optional video, and ground-only A/B OTA|
+|Observability|`cli.ino`, `log.ino`|Local serial diagnostics, 25 Hz RAM logs, and performance sampling every 16 cycles|
+|Configuration and math|`parameters.ino`, `*.h`|Parameter validation/NVS, PID, filtering, quaternion, and vector utilities|
+
+`flow.ino` receives TF-0850 data, `estimate.ino` updates height state, and `control_altitude.ino` implements altitude control. The flow/ToF module is mounted about 24 mm forward of the yaw center, and the horizontal estimator compensates that geometry.
 
 ##### 2.2 Hardware Pin Mapping
 
@@ -381,46 +389,18 @@ The following pins are directly tied to the baseboard hardware. Confirm the base
 
 | Peripheral | GPIO | Description |
 |---|---|---|
-| I2C SDA | 2 | MPU9250 and BMP280 data, 400 kHz; BMP280 is diagnostic while flight height comes from ToF |
-| I2C SCL | 43 | MPU9250 clock line |
+| I2C SDA | 2 | Compile-time selected IMU data, 400 kHz |
+| I2C SCL | 43 | Compile-time selected IMU clock line |
 | Optical-flow RX | 8 | Serial1 RX, connected to optical-flow module TX. Protocol: frame header 0xDF, 19-byte packet, 115200 bps |
 | Optical-flow TX | 7 | Serial1 TX, connected to optical-flow module RX |
 | SBUS RX | 44 | Serial2 RX, 100 Kbps, 25-byte frame |
 | SBUS TX | 9 | Serial2 TX |
 | LED | 21 | Onboard NEOPIXEL |
-| MOTOR 0 | 4 | LEDC PWM 10 kHz -> A03400 -> rear left (CW) |
+| Battery voltage | 1 / A0 | `VBAT_SW × 0.5` divider input |
+| MOTOR 0 | 4 | LEDC PWM 10 kHz -> AO3400 -> rear left (CW) |
 | MOTOR 1 | 3 | Rear right (CW) |
 | MOTOR 2 | 6 | Front right (CCW) |
 | MOTOR 3 | 5 | Front left (CCW) |
-
-##### 2.3 Main Loop Execution Order
-
-```cpp
-#define WIFI_ENABLED 1         // Enable Wi-Fi MAVLink
-#define OPTICAL_FLOW_ENABLED 1 // Enable optical-flow sensor
-```
-
-The main loop keeps a fixed data-dependency order: acquisition, timing, estimation, control, motor output, communication, and logging. MJPEG streaming runs as a lower-priority task while the flight `loopTask` keeps higher priority:
-
-```cpp
-void loop() {
-    readIMU();
-    step();
-    readRC();
-    readOpticalFlow();
-    updateBaro();
-    estimate();
-    estimateHeight();
-    estimateHorizontalVelocity();
-    control();
-    sendMotors();
-    handleInput();
-    processMavlink();
-    readVoltage();
-    logData();
-    syncParameters();
-}
-```
 
 #### 3. Core Subsystems
 
@@ -488,17 +468,17 @@ v = flow * (1/10000) * height(m) / dt(s)
 
 - Airborne detection requires arming, throttle above 0.12, fresh flow, and valid ToF continuously for 250 ms.
 
-##### 3.3 Flight Control (`control.ino`)
+##### 3.3 Flight Control (`control.ino` + `control_*.ino`)
 
-**Five flight modes**
+**Progressive control modes**
 
 | Mode | Value | Behavior |
 |---|---|---|
-| STAB | 2 | Default mode. Direct throttle + self-leveling attitude stabilization. RC sticks map to angle commands. |
-| ALT_HOLD | 4 | ToF altitude hold. The entry height becomes the target; pilot throttle remains the base thrust and the altitude PID adds correction. |
-| POS_HOLD | 5 | Optical-flow position hold. Once altitude hold, flow, ToF, attitude, and yaw conditions are satisfied, the controller locks the current point; Roll/Pitch sticks move the target. |
-| ACRO | 1 | Rate-control mode. Sticks map directly to rate targets |
-| AUTO | 3 | MAVLink external-control mode. Accepts SET_ATTITUDE_TARGET or SET_ACTUATOR_CONTROL_TARGET |
+| STAB | 2 | Default attitude-stabilized mode. Throttle maps directly to collective thrust, and Roll/Pitch sticks map to attitude targets. |
+| ALT_HOLD | 4 | ToF altitude hold. Mid-throttle holds the target height; deviation from mid-stick commands bounded vertical speed. Collective thrust combines hover feedforward and altitude PID. |
+| POS_HOLD | 5 | Optical-flow position hold. The controller locks position after altitude and horizontal estimates qualify; Roll/Pitch sticks move the target through velocity commands. |
+
+`AUTO` is an internal ownership state for automatic flight and validated Offboard control, not a fourth pilot mode. The three public modes reuse the same attitude, rate, and mixer inner loops and add vertical and horizontal feedback only when ToF and optical-flow state qualify.
 
 **Mode switching with RC channel 6**
 
@@ -519,11 +499,13 @@ Disarm: throttle lowest + yaw full left
 
 | Parameter | Default | Description |
 |---|---:|---|
-| Altitude PID | P=0.8, I=0.1, D=0.2 | Compile-time constants; correction limited to +/-0.2 and integral to +/-0.3 |
-| `POS_HOLD_P` | 0.50 | Position error to horizontal velocity target |
-| `POS_STICK_V` | 0.50 m/s | Target-point speed at full Roll/Pitch stick |
-| `POS_VEL_P_X/Y` | 0.20 / 0.20 | Horizontal velocity-loop proportional gain |
-| `POS_VEL_I_X/Y` | 0 / 0 | Horizontal velocity-loop integral gain |
+| Altitude PID | Current registered firmware values | Device values may be overridden by NVS; read back `ALT_P`, `ALT_I`, and `ALT_D` with `p` |
+| `ALT_HOVER` | 0.49 | Reboot baseline for hover thrust; adapted slowly in RAM after takeoff |
+| `ALT_VEL_MAX` | 0.45 m/s | Maximum vertical-speed command outside the throttle mid-stick deadband |
+| `POS_HOLD_P` | 0.80 | Position error to horizontal velocity target |
+| `POS_STICK_V` | 0.70 m/s | Target-point speed at full Roll/Pitch stick |
+| `POS_VEL_P_X/Y` | 0.30 / 0.30 | Horizontal velocity-loop proportional gain |
+| `POS_VEL_I_X/Y` | 0.10 / 0.10 | Horizontal velocity-loop integral gain, limited to 0.08 rad per axis |
 | `POS_VEL_D_X/Y` | 0 / 0 | Horizontal velocity-loop derivative gain |
 | `POS_CMD_RATE` | 1.20 rad/s | Position-control attitude-command slew limit |
 | `FLOW_GYRO_P/R` | -0.78 / -0.77 | Pitch/Roll rotational-flow compensation |
@@ -535,13 +517,14 @@ Disarm: throttle lowest + yaw full left
 
 | Message | Frequency | Description |
 |---|---|---|
-| HEARTBEAT (#0) | 2 Hz | type=QUADROTOR, autopilot=GENERIC, base_mode=armed/disarmed |
-| EXTENDED_SYS_STATE | 2 Hz | Reports landed / in-air state |
-| BATTERY_STATUS | 2 Hz | Reports battery fields when a voltage-sense pin is configured |
+| HEARTBEAT / CURRENT_MODE | 2 Hz | Reports GENERIC quadrotor identity, current custom mode, and arm state |
+| EXTENDED_SYS_STATE / SYS_STATUS | 2 Hz | Reports landed state, sensor health, and system status |
+| BATTERY_STATUS | 2 Hz | Reports measured voltage when a voltage-sense pin is configured; default hardware reports unknown |
 | ATTITUDE_QUATERNION | 10 Hz | Quaternion attitude and angular velocity, converted according to MAVLink FRD coordinate conventions |
 | RC_CHANNELS_RAW (#35) | ~10 Hz | Raw PWM values for 16 channels |
 | ACTUATOR_CONTROL_TARGET | 10 Hz | Current normalized outputs for four motors |
 | SCALED_IMU | 10 Hz | Accelerometer and gyroscope data |
+| LOCAL_POSITION_NED / DISTANCE_SENSOR | 10 Hz | Reports onboard relative position/velocity and valid ToF range |
 
 **Important received messages**
 
@@ -550,145 +533,70 @@ Disarm: throttle lowest + yaw full left
 | MANUAL_CONTROL | External manual control, mapped to throttle, pitch, roll, and yaw |
 | PARAM_REQUEST_LIST / PARAM_REQUEST_READ / PARAM_SET | Parameter reading and setting |
 | MAV_CMD_COMPONENT_ARM_DISARM | MAVLink arming/disarming; arming is rejected when throttle is higher than 0.05 |
-| MAV_CMD_DO_SET_MODE | Switches `RAW/ACRO/STAB/AUTO`; select altitude and position hold with the RC three-position switch |
-| SET_ATTITUDE_TARGET | Receives attitude, rate, and thrust targets in AUTO mode |
-| SET_ACTUATOR_CONTROL_TARGET | Receives direct motor-control values in AUTO mode |
-| SERIAL_CONTROL | Passes CLI commands through MAVLink |
+| MAV_CMD_DO_SET_MODE / DO_SET_STANDARD_MODE | Selects supported stabilized, altitude, position, and AUTO modes |
+| MAV_CMD_NAV_TAKEOFF / MAV_CMD_NAV_LAND | Executes sensor-gated automatic takeoff and landing |
+| SET_ATTITUDE_TARGET | Receives attitude, rate, and thrust targets in AUTO after stream warmup |
+| SET_POSITION_TARGET_LOCAL_NED | Receives bounded local position/velocity and altitude/vertical-speed targets in AUTO |
+| SERIAL_CONTROL | Mirrors local diagnostic text to MAVLink only; no inbound remote shell is accepted |
+
+Minimal does not accept direct MAVLink motor control. Use the standard parameter protocol only while disarmed; in flight, the supported entry points are gated lifecycle commands, a manual-control lease, and Offboard position or velocity targets.
 
 ##### 3.5 ROS 2 / MAVROS Integration
 
-The repository's `ros2_open32drone` package runs on the host, connects MAVROS to flight-controller UDP 14550, and publishes the onboard MJPEG stream as ROS 2 image topics. The flight controller creates AP `open32drone` with password `12345678` at `192.168.4.1`.
+The repository connects MAVROS to flight-controller UDP 14550 and provides IMU/odometry/ToF/battery/RC interfaces, `/cmd_vel`, `/goal_pose`, lifecycle commands, TF, RViz2, and acceptance tools. The aircraft creates AP `open32drone` by default or can explicitly join a router in STA mode; only Android or ROS 2 may control one aircraft at a time. The current ROS package does not relay experimental HTTP MJPEG or publish `camera_info`. Installation, single- and multi-aircraft naming, public interfaces, and supervised flight are consolidated in [ROS 2 Companion Software and Automatic Flight](docs/AUTOMATIC_FLIGHT_AND_ROS2.md).
 
 **Architecture**
 
 ```python
-ComponentContainer("open32drone")
-├── mavros::Router  <- UDP -> ESP32 (AP: 192.168.4.1:14550 / STA: check serial wifi output)
-│   ├── fcu_urls: udp://:14550@<flight-controller-ip>:14550
-│   ├── gcs_urls: udp://0.0.0.0:14551@            (forward to ground station)
-│   └── uas_urls: /open32drone_uas                (internal)
-└── mavros::UAS     <- Router -> ROS topics
-    namespace: /open32drone
+open32drone_driver
+├── MAVROS                 <- UDP 14550 -> Open32Drone
+├── interface_bridge       <- Reliable IMU/odom/ToF/battery/RC + diagnostics + TF
+├── flight_manager         <- arm/takeoff/land/mode commands
+├── offboard_control       <- 20 Hz position/velocity targets and watchdog
+└── rc_bridge              <- explicitly enabled raw RC stream
 ```
 
 **Key parameters**
 
 | Parameter | Value | Description |
 |---|---|---|
-| `fcu_urls` | `udp://:14550@<flight-controller-ip>:14550` | Use 192.168.4.1 in AP mode; in STA mode, use the STA IP printed by serial command `wifi` |
-| `gcs_urls` | `udp://0.0.0.0:14551@` | Also forwards to the ground station; 14551 avoids conflict with flight-controller port 14550 |
-| `system_id` | 255 | GCS system ID, standard MAVLink convention |
-| `component_id` | 240 | MAVROS component ID, standard value |
-| `target_system_id` | 1 | Flight-controller SYSTEM_ID=1, consistent with `mavlink.ino` |
-| `target_component_id` | 1 | Flight-controller component ID |
-| `fcu_protocol` | v2.0 | MAVLink v2 |
-| `connection_timeout` | 10.0 | Connection timeout, 10 seconds |
-| `heartbeat_interval` | 1.0 | Heartbeat at 1 Hz |
-| `timeout_heartbeat` | 5.0 | Consider offline after 5 seconds without heartbeat |
-| `enable_autopilot_version_check` | false | Skip version check because the custom controller has no standard version number |
-
-**Plugin whitelist**
-
-Enabled MAVROS plugins: sys_status / command / param / manual_control / imu. `open32drone.launch.py` also starts the MJPEG camera node, which publishes `image_raw` and `image_raw/compressed`.
-
-**IMU noise parameters**
-
-```text
-imu/frame_id: base_link
-imu/linear_acceleration_stdev: 0.0003
-imu/angular_velocity_stdev: 0.000349
-imu/orientation_stdev: 1.0
-```
-
-**Topic remapping**
-
-```text
-/open32drone/UAS1/imu/data -> /imu/data
-/open32drone/UAS1/imu/data_raw -> /imu/data_raw
-/open32drone/UAS1/manual_control/send -> /manual_control
-```
-
-**QoS configuration for IMU**
-
-```text
-history: keep_last, depth: 10
-reliability: best_effort
-durability: volatile
-```
+| `fcu_url` | `udp://0.0.0.0:14550@192.168.4.1:14550` | Default AP connection; replace the address with serial `wifi` output in STA mode |
+| `tgt_system / tgt_component` | `1 / 1` | MAVLink target identifiers for Open32Drone |
+| setpoint rate | 20 Hz | Offboard node continuously refreshes position or velocity targets |
+| warmup | at least 0.35 s, 5 samples, 10 Hz | Firmware checks stream continuity before entering AUTO |
+| watchdog | 0.30 s | Onboard Offboard failure handling starts after target updates stop |
+| public QoS | Reliable | Bridge topics such as `/imu/data`, `/odom`, and `/range/downward` support ordinary ROS tools |
 
 ##### 3.6 ROS 2 Manual-Control Command Reference
 
-**Arm and disarm**
-
-```text
-# Arm
-ros2 service call /osdrone/arming mavros_msgs/srv/CommandBool "{value: true}"
-
-# Disarm
-ros2 service call /osdrone/arming mavros_msgs/srv/CommandBool "{value: false}"
-```
-
-**Manual flight control**
-
-Send `ManualControl` messages through the `/osdrone/send` topic. All four-axis parameters use the range **[-1000, 1000]**.
+The tutorial keeps only the shortest operating path; the interface table, multi-aircraft naming, TF, acceptance rules, and troubleshooting live in the dedicated ROS 2 guide. Automatic takeoff lets the firmware perform preflight, arming, climb, and position-hold handover before a finite-duration body-frame target is sent.
 
 | Action | Parameter | Command |
 |---|---|---|
-| Hover | Throttle 200 | `ros2 topic pub /osdrone/send mavros_msgs/msg/ManualControl "{x:0,y:0,z:200,r:0,buttons:0}" --once` |
-| Move forward | Pitch +300 | `ros2 topic pub /osdrone/send mavros_msgs/msg/ManualControl "{x:300,y:0,z:500,r:0,buttons:0}" --once` |
-| Move backward | Pitch -300 | `ros2 topic pub /osdrone/send mavros_msgs/msg/ManualControl "{x:-300,y:0,z:500,r:0,buttons:0}" --once` |
-| Move right | Roll +300 | `ros2 topic pub /osdrone/send mavros_msgs/msg/ManualControl "{x:0,y:300,z:500,r:0,buttons:0}" --once` |
-| Move left | Roll -300 | `ros2 topic pub /osdrone/send mavros_msgs/msg/ManualControl "{x:0,y:-300,z:500,r:0,buttons:0}" --once` |
-| Turn right | Yaw +200 | `ros2 topic pub /osdrone/send mavros_msgs/msg/ManualControl "{x:0,y:0,z:500,r:200,buttons:0}" --once` |
-| Turn left | Yaw -200 | `ros2 topic pub /osdrone/send mavros_msgs/msg/ManualControl "{x:0,y:0,z:500,r:-200,buttons:0}" --once` |
+| Take off | 0.65 m above the takeoff surface | `ros2 run open32drone_driver control takeoff --height 0.65` |
+| Move forward | +X, 0.25 m/s for 1.5 s | `ros2 run open32drone_driver control velocity 0.25 0.00 0.00 --duration 1.5` |
+| Move left | +Y, 0.25 m/s for 1.5 s | `ros2 run open32drone_driver control velocity 0.00 0.25 0.00 --duration 1.5` |
+| Climb | +Z, 0.20 m/s for 1 s | `ros2 run open32drone_driver control velocity 0.00 0.00 0.20 --duration 1` |
+| Land | Controlled descent and automatic disarm | `ros2 run open32drone_driver control land` |
 
-**Note**: each `--once` command sends only one frame. Continuous flight requires repeated publishing or a node that publishes at a fixed rate.
+`/cmd_vel` uses body coordinates (+X forward, +Y left, +Z up), while `/goal_pose` is an absolute target in `open32drone/odom`. Keep one control source active, run `ros2 run open32drone_driver bench_test --duration 5` with propellers removed before automatic flight, and use `control status` to verify a live connection.
 
-**Flight-mode switching**
+##### 3.7 A/B Firmware Update and the Minimal Bundle
 
-Use MAVLink `MAV_CMD_DO_SET_MODE` (command=176). `param1=1.0` means base_mode=CUSTOM, and `param2` is the submode number.
+The current development configuration uses the ESP32-S3 8 MB `default_8MB` A/B layout: `ota_0` starts at `0x10000`, `ota_1` at `0x340000`, and each app slot is `0x330000` bytes. A legacy single-app layout requires one USB migration; subsequent wireless updates write only the inactive slot.
 
-| Mode | param2 | ROS 2 Command |
-|---|---|---|
-| MANUAL | 0.0 | `ros2 service call /osdrone/command mavros_msgs/srv/CommandLong "{command:176,param1:1.0,param2:0.0}"` |
-| ACRO | 1.0 | `ros2 service call /osdrone/command mavros_msgs/srv/CommandLong "{command:176,param1:1.0,param2:1.0}"` |
-| STAB | 2.0 | `ros2 service call /osdrone/command mavros_msgs/srv/CommandLong "{command:176,param1:1.0,param2:2.0}"` |
-| AUTO | 3.0 | `ros2 service call /osdrone/command mavros_msgs/srv/CommandLong "{command:176,param1:1.0,param2:3.0}"` |
+The matched files under `releases/minimal/` are:
 
-**Parameter read/write**
+| File | Purpose |
+|---|---|
+|`Open32Drone-minimal-merged.bin`|Complete 8 MiB USB image written at `0x0` for a new MCU or recovery after full erase|
+|`Open32Drone-minimal-app.bin`|Application image for ground-only A/B OTA|
+|`Open32Drone-Controller-0.1.apk`|Matched Android client, `versionName 0.1`, `versionCode 1`|
+|`SHA256SUMS`|Integrity verification before flashing or upload|
 
-```text
-# Pull all parameters locally
-ros2 service call /osdrone/pull mavros_msgs/srv/ParamPull "{force_pull: true}"
+Perform the first migration with propellers removed and avoid `erase-flash` when calibration data must be retained. After migration, run `sys`, `imu`, `flow`, and `ota` to verify both app slots, gyro calibration, ToF, loop timing, and the local device token. Wireless update requires a landed, disarmed vehicle with automatic flight, Offboard, and video stopped. Android and ROS 2 uploaders accept only the application `.bin`, never the merged image. They transmit the token, exact length, and SHA-256. The new slot is confirmed only after parameter storage, IMU, attitude, loop rate, ToF, and MAVLink remain healthy; otherwise the bootloader rolls back.
 
-# Listen to parameter events to get the parameter list
-ros2 topic echo /parameter_events
-
-# Read specified parameters
-ros2 service call /osdrone/get_parameters rcl_interfaces/srv/GetParameters "{names: ["CTL_R_RATE_P", "CTL_P_RATE_P", "CTL_Y_RATE_P"]}"
-```
-
-**Write parameters**
-
-```text
-ros2 service call /osdrone/set mavros_msgs/srv/ParamSetV2 "{force_set: true, param_id: "CTL_R_RATE_P", value: {type: 3, double_value: 0.15}}"
-```
-
-`type` corresponds to MAVLink `MAV_PARAM_TYPE`: 1=uint8, 2=int8, 3=uint16, 4=int16, 5=uint32, 6=int32, 9=float, using `double_value` in practice. Most parameters in the flight-controller code are float, so type=9 is commonly used.
-
-**Usage notes**
-
-- Each ManualControl `--once` command sends only one frame. Use a loop in code for continuous control.
-
-- Throttle `z` ranges from [0, 1000], corresponding to 0-100% thrust in the controller.
-
-- Pitch/Roll [-1000, 1000] maps to `CTL_TILT_MAX`, 30 degrees by default; yaw maps to `CTL_Y_RATE_MAX`.
-
-- After switching modes, wait for heartbeat confirmation. QGC or `ros2 topic echo /osdrone/state` can show the current mode.
-
-- Make sure throttle=0 before disarming, otherwise the controller will not respond to the disarm command.
-
-##### 3.7 CLI Debug Commands
+##### 3.8 CLI Debug Commands
 
 USB serial runs at 115200 bps. The current `cli.ino` is compatible with both UART0 and ESP32-S3 USB Serial/JTAG, and provides the following commonly used commands:
 
@@ -705,12 +613,22 @@ USB serial runs at 115200 bps. The current `cli.ino` is compatible with both UAR
 | `time` | Loop rate, average/maximum period, and overruns | Check real-time loop load |
 | `ca` / `cr` | Six-face accelerometer calibration / SBUS RC calibration | Use during first assembly or after rebuilding |
 | `wifi` | AP/STA, IP, client, and MAVLink status | Check the network connection |
-| `ap <ssid> <password>` | Save AP name and password | Change wireless settings; reboot to apply |
+| `ap <ssid> <password>` / `sta <ssid> <password>` | Save AP or router-STA settings | Reboot to apply; failed STA startup opens a recovery AP |
 | `arm` / `disarm` | Arm/disarm through serial | Use for propeller-removed debugging |
-| `raw` / `stab` / `acro` / `auto` | Select a debug mode | Debug the control chain through serial |
+| `stab` / `alt` / `pos` | Select one of the three flight modes | Propeller-off serial control-chain checks |
 | `mfr` / `mfl` / `mrr` / `mrl` | Single-motor test | Must remove propellers; used to confirm motor index |
 | `log` / `log dump` | RAM log header / CSV data | Post-flight analysis of attitude, velocity, position, and optical flow |
+| `perf` | Per-stage loop timing | Evaluate the 300 Hz loop and background load while disarmed |
+| `ota` | A/B update state and device token | Local authentication for the companion Android/ROS 2 uploader |
 | `sys` / `reset` / `reboot` | System information / attitude reset / reboot | Inspect and maintain the firmware |
+
+##### 3.9 Android Client and Matching Versions
+
+Android 8.0 (API 26) or newer is required. One configurable aircraft IPv4 address is used for MAVLink, optional video, and OTA. The client provides altitude/position modes, automatic takeoff and landing, dual sticks, diagnostics, and A/B application-image upload.
+
+The operating sequence is: join the `open32drone` Wi-Fi network, wait for MAVLink and ToF readiness, select an assisted mode, arm/take off, then land and confirm disarm. Video replaces the default background only after a fresh MJPEG frame arrives; a stream interruption does not freeze the last frame. Explicit physical SBUS activity takes ordinary control ownership and stops normal phone stick commands, while emergency disarm remains available.
+
+The Minimal Android APK, firmware, and ROS 2 bundle form one matching interface set. Verify `SHA256SUMS` before installation or flashing and do not mix components from different commits. Android and ROS 2 must not control the same aircraft at once; QGC is limited to ground parameter maintenance. The current APK is debug-signed for development and controlled testing, not a product-signed release.
 
 #### 4. Tuning Recommendations
 
@@ -737,13 +655,13 @@ Tune only one class of parameters at a time, and record logs before and after ea
 
 ##### 4.3 Altitude Hold
 
-Altitude hold uses pilot base throttle plus PID correction. Find approximate hover throttle in `STAB`, keep a similar throttle when entering `ALT_HOLD`, and let the controller capture the entry height.
+Altitude hold combines hover-thrust feedforward with altitude PID. In assisted modes, the throttle stick is a vertical-speed command centered at 50%. First estimate hover thrust in `STAB` and store it as `ALT_HOVER`; after entering `ALT_HOLD`, center the stick to hold height and move it up/down to shift the altitude target. After ground arming, motors remain at idle until throttle exceeds the takeoff trigger for 0.20 s, then a bounded thrust ramp starts.
 
 | Symptom | First Adjustment |
 |---|---|
-| Insufficient correction after entering `ALT_HOLD` | Keep base throttle near the hover point |
-| Height oscillates | Check the ToF surface and reduce the compile-time altitude P/D gains if needed |
-| Height response is sluggish | Confirm `AltHold=1` with `alt`, then increase the compile-time altitude P gain slightly |
+| Insufficient thrust after entering `ALT_HOLD` | Check `ALT_HOVER` and runtime `hoverEstimate`; do not substitute stick bias for feedforward calibration |
+| Height oscillates | Check the ToF surface and reduce `ALT_P` / `ALT_D` if needed |
+| Height response is sluggish | Confirm altitude engagement with `alt`, then adjust `ALT_P` or `ALT_VEL_MAX` slightly |
 | Altitude hold does not engage | Inspect `Reject` and ToF height from `alt` |
 
 ##### 4.4 Optical-Flow Direction and Position Hold
@@ -779,12 +697,33 @@ Calibration order:
 | Control velocity | `velocity.x/y/z` |
 | Optical-flow chain | `flowRaw.x/y`, `flowComp.x/y`, `flowFilt.x/y`, `flowGyro.x/y` |
 | Position control | `targetPosX/Y`, `targetVel.x/y`, `velError.x/y`, `posRollCmd`, `posPitchCmd` |
-| Gates and diagnostics | `flowAgeMs`, `flowPosGate`, `posHoldGate`, `flowReject`, `posReject`, `altReject` |
-| Control output | `thrustTarget`, `motor.rl/rr/fr/fl`, `posSaturated`, `motorSaturated` |
+| Gates and diagnostics | `flowAgeMs`, `flowPosGate`, `posHoldGate`, `flowReject`, `posReject`, `altReject`, `actuatorOwner`, `autoPhase`, `posFallback` |
+| Control output | `thrustTarget`, `motor.rl/rr/fr/fl`, `mixerScale`, `posSaturated`, `motorSaturated` |
 
-The log stores the latest six seconds at 50 Hz. After disarming, run `log dump` and plot attitude, height, flow, position targets, control commands, and motor outputs with a spreadsheet, Python, or Matlab.
+The RAM log stores roughly the latest 12 seconds at 25 Hz and is exported with `log dump` after disarming; bulk export is blocked in flight. `perf` samples IMU, input, estimation, control, CLI, MAVLink, and housekeeping stage timing once every 16 control cycles. Safety retains link-loss descent and a single sustained-attitude threshold for minimum tip-over motor stop; it performs no collision classification and has no separate incident buffer.
 
-#### 5. Troubleshooting Table
+#### 5. Preflight and Staged Acceptance
+
+After a new build, a flight-critical code change, or a sensor replacement, progress in this order:
+
+```mermaid
+flowchart LR
+  BUILD["build and static checks"] --> BENCH["propeller-off checks"]
+  BENCH --> RESTRAINED["restrained low-power tests"]
+  RESTRAINED --> FLIGHT["controlled low-altitude flight"]
+  FLIGHT --> EVIDENCE["parameters · logs · version record"]
+```
+
+| Stage | Required work | Gate to proceed |
+|---|---|---|
+|Software|Build with fixed ESP32 Core/partition settings; run tests and credential checks|Build succeeds and version/parameter sources are known|
+|Propeller-off|Run `sys`, `imu`, `rc`, `flow`; calibrate; test four motors; stop RC/Offboard input|Sensor directions, motor order, rejection logic, and stop paths are correct|
+|Restrained power|Inspect spin-up, takeoff ramp, altitude engagement, position gates, landing, and the sustained-tip threshold|Output is continuous and bounded, takeover works, and no abnormal saturation occurs|
+|Controlled flight|Validate STAB, ALT_HOLD, POS_HOLD, then automatic flight and external control|Attitude is stable, height/position corrections have the right sign, and failures degrade as intended|
+
+Before flight, check frame orientation, motor/propeller installation, controller mounting, floor texture and illumination, ToF reflection, and area isolation. Hold the aircraft still at boot until `imu` reports completed gyro calibration. Use `rc` to check sticks and the three-position switch, and `flow` to inspect ToF and horizontal flow separately. The first powered flight should be a brief low-altitude STAB test; proceed to altitude and position hold only after manual recovery is demonstrated. Change one factor per run and record firmware, hardware, parameters, environment, and RAM logs.
+
+#### 6. Troubleshooting Table
 
 | Symptom | Possible Cause | Solution |
 |---|---|---|

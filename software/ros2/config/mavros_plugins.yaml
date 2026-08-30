@@ -1,0 +1,7 @@
+/**/distance_sensor:
+  ros__parameters:
+    base_frame_id: base_link
+    config: >-
+      {tof: {id: 0, frame_id: tof_link, orientation: PITCH_270,
+      field_of_view: 0.0, send_tf: false,
+      sensor_position: {x: 0.0, y: 0.0, z: 0.0}}}

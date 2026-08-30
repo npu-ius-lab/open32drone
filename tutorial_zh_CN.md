@@ -14,9 +14,9 @@
 
 ## 一、项目简介
 
-**Open32drone** 是一个基于**ESP32-S3**开发的高性能、低成本、科研教育级开源微型无人机平台。
+**Open32Drone Minimal** 是一个基于 **ESP32-S3** 的开源微型无人机平台，面向科研教育、嵌入式飞控开发与低空机器人实验。
 
-本项目基于开源项目[Flix](https://github.com/okalachev/flix/tree/master)进行二次开发，保留了其轻量化的代码架构，并在此基础上引入了光流与 ToF 传感器，实现无人机室内环境下的定点与定高飞行。Open32drone 支持 MAVLink 协议与 ROS 接入，旨在为开发者提供一个低成本、高可扩展性的微型飞行器实验平台，适用于无人机控制理论学习、集群算法验证及室内导航研究。
+平台在轻量化嵌入式架构中集成惯性测量、光流/ToF、SBUS、四路有刷电机驱动、Wi-Fi/MAVLink 和 ROS 2 接口。单一 ESP32-S3 负责姿态稳定、辅助起降、低空定高/定点以及外部位置和速度控制；载板、传感器时序、相对状态估计、递进控制和配套应用共同构成一套匹配的系统实现。
 
 ## 二、项目教程
 
@@ -64,13 +64,13 @@
 
 参考价格：24元（4个价格）
 
-##### IMU模块 十轴传感器
+##### IMU模块
 
 <p align="center">
     <img src="img\imu.PNG" />
 </p>
 
-规格型号：GY-91 九轴MPU9250+BMP280气压计
+规格型号：GY-91 模块（MPU9250 + BMP280）。当前飞行配置关闭 BMP280，姿态使用 MPU9250，定高使用光流模块内置 ToF。
 
 需求：1个
 
@@ -282,7 +282,7 @@ https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32
 </p>
 
 
-依次进入 **Tools > Board > Boards Manager...**，在搜索框中输入关键字 **esp32**，选择最新版本的 **esp32** 并安装。
+依次进入 **Tools > Board > Boards Manager...**，在搜索框中输入关键字 **esp32**，安装与工程验证环境一致的 **esp32 3.3.6**。
 
 <p align="center">
     <img src="img\software2.PNG" />
@@ -350,31 +350,39 @@ https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32
     <img src="img\software7.PNG" />
 </p>
 
-工程依赖 `FlixPeriph`、`SBUS`、`MAVLink` 和 `Adafruit BMP280`。选择 `XIAO_ESP32S3` 后启用 OPI PSRAM，并使用 `max_app_8MB` 分区，以容纳相机、Wi-Fi 和飞控功能。
+标准构建使用 Arduino-ESP32 `3.3.6`、`FlixPeriph 1.10.4`、`MAVLink 2.0.25` 和 SBUS。选择 `XIAO_ESP32S3` 后启用 OPI PSRAM，使用 `default_8MB` A/B 应用分区与 DIO Flash。默认 IMU 后端兼容 MPU6500/MPU9250；ICM20948 和 MPU6050 仅作为需要单独验证的编译配置。Minimal 固件没有气压计控制路径。
 
-#### 2. 飞控代码架构解读
+#### 2. 飞控代码架构
 
-##### 2.1 文件结构总览
+本节给出开发时需要的最短路径；完整的模块职责、控制权、后台服务与源码阅读顺序见[固件架构](docs/FIRMWARE_ARCHITECTURE.zh-CN.md)。
 
-本实验固件基于 Flix 架构二次开发，加入串口光流 ToF、定高、定点、MAVLink UDP、串口 CLI、NVS 参数持久化等功能。以下表格列出当前源文件及其职责：
+##### 2.1 运行时结构
 
-| 文件 | 职责 | 详细介绍 |
+当前固件不是“每个功能一个任务”的并行飞控。飞行关键路径集中在固定 300 Hz 的高优先级 `loopTask`：传感器采集完成后，状态估计、目标选择、飞行控制和电机输出按固定依赖顺序执行。CLI、MAVLink 与 OTA 启动验收在同一循环中限频服务；可选相机和 MJPEG HTTP 服务运行在低优先级 core-0 后台任务，不拥有控制权。
+
+```mermaid
+flowchart LR
+  INPUT["imu · rc · flow"] --> EST["estimate"]
+  EST --> SAFE["safety · ownership"]
+  SAFE --> CTRL["auto · altitude · position · attitude · rate"]
+  CTRL --> MOTOR["mix · PWM"]
+  MOTOR --> SERVICE["CLI · MAVLink · log · NVS"]
+  CAMERA["OV3660"] --> STREAM["低优先级 HTTPD 图传任务"]
+```
+
+| 层次 | 文件 | 代码边界 |
 |---|---|---|
-|`open32drone_v3.ino`|主入口|初始化参数、电机、相机、WiFi、IMU、BMP280、SBUS 和光流；实时循环依次执行采集、估计、控制、电机输出、通信、日志和参数同步|
-|`control.ino`|飞控控制|包含 STAB、ALT_HOLD、POS_HOLD、ACRO、AUTO；姿态/角速度串级控制、ToF 定高和光流位置/速度控制，并统一处理控制接入与复位|
-|`estimate.ino`|状态估计|四元数陀螺积分与门控重力修正；纯 ToF 相对高度及垂直速度；带时延角速度补偿的光流水平速度和位置估计|
-|`flow.ino`|光流 ToF 驱动|`Serial1`，GPIO8 接光流 TX，GPIO7 接光流 RX；解析 0xDF 帧头 19 字节数据包；有效高度 0.05-6.0 m；150 ms 超时判定失效|
-|`imu.ino`|IMU 驱动|MPU9250 I2C，SDA=GPIO2，SCL=GPIO43，400kHz；陀螺静止自学习；六面加速度计标定|
-|`rc.ino`|遥控输入|SBUS，`Serial2` RX=GPIO44，TX=GPIO9；默认 Roll/Pitch/Throttle/Yaw/Mode 通道为 0/1/2/3/6|
-|`motors.ino`|电机输出|4 路 LEDC PWM，10kHz、10-bit；GPIO4/3/6/5 对应左后/右后/右前/左前|
-|`wifi.ino`|WiFi、UDP 与图传|默认建立 AP `open32drone`，地址 `192.168.4.1`；UDP 14550 用于 MAVLink，HTTP `/stream` 输出 QVGA MJPEG|
-|`mavlink.ino`|MAVLink 通信|发送心跳、姿态、RC、执行器、IMU 和系统状态；支持 MANUAL_CONTROL、参数读写、解锁、外部控制、日志读取和 CLI 透传|
-|`cli.ino`|串口命令行|115200 bps，提供参数、姿态、IMU、RC、光流、定高、电机、网络、日志、校准和系统状态命令|
-|`parameters.ino`|参数存储|使用 ESP32 NVS 命名空间 `flix`；启动时读取已有参数，参数变化后低频写入，避免启动时写满 NVS|
-|`log.ino`|飞行日志|50 Hz、300 样本 RAM 循环日志，记录估计、目标、光流补偿、控制门控、饱和状态和电机输出|
-|`safety.ino`|安全保护|RC 超时后进入平滑下降；AUTO 外部目标超时后立即解除锁定|
-|`led.ino` / `time.ino`|辅助模块|LED 状态指示、`dt` 与 `loopRate` 统计|
-|`pid.h` / `lpf.h` / `quaternion.h` / `vector.h` / `util.h`|数学与工具|PID、一阶低通、四元数、向量、Rate/Delay 等基础工具|
+|入口与调度|`firmware.ino`、`time.ino`|编译开关、初始化顺序、64 位单调时间、主循环与任务优先级|
+|输入|`imu_backend.h`、`imu.ino`、`rc.ino`、`flow.ino`|编译期选择的 IMU、SBUS 和 TF-0850 数据包；ToF 与 XY 光流分别维护序列、时间戳和健康状态|
+|估计|`estimate.ino`|姿态、ToF 高度/垂直速度，以及带角速度时间对齐的水平速度/相对位置|
+|控制|`control.ino`、`control_modes.ino`、`control_offboard.ino`、`control_auto_flight.ino`、`control_altitude.ino`、`control_position.ino`、`control_stabilization.ino`|共享控制状态，以及控制权、Offboard、自动起降、定高、定点、姿态和角速度各层|
+|安全与电源|`safety.ino`、`power.ino`|解锁预检、失联下降、持续翻覆停桨、电池电压与悬停推力前馈|
+|执行|`motors.ino`|Quad-X 映射与四路 LEDC PWM|
+|通信|`mavlink.ino`、`wifi.ino`、`camera.ino`、`ota.ino`|MAVLink、AP/STA 网络、可选图传和仅地面 A/B OTA|
+|观测|`cli.ino`、`log.ino`|本地串口诊断、25 Hz RAM 日志和每 16 圈一次的性能采样|
+|配置与数学|`parameters.ino`、`*.h`|参数校验/NVS、PID、滤波、四元数和向量工具|
+
+TF-0850 数据由 `flow.ino` 接收，高度状态由 `estimate.ino` 更新，定高控制位于 `control_altitude.ino`。光流/ToF 模块安装在偏航旋转中心前方约 24 mm，固件在水平估计中补偿该几何偏移。
 
 ##### 2.2 硬件引脚映射
 
@@ -382,46 +390,18 @@ https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32
 
 | 外设 | GPIO | 说明 |
 |---|---|---|
-|I2C SDA|2|MPU9250 与 BMP280 数据线，400 kHz；BMP280 用于诊断，飞行高度来自 ToF|
-|I2C SCL|43|MPU9250 时钟线|
+|I2C SDA|2|编译期选择的 IMU 数据线，400 kHz|
+|I2C SCL|43|编译期选择的 IMU 时钟线|
 |光流 RX|8|Serial1 RX，接光流模块 TX。协议：帧头 0xDF，19字节包，115200bps|
 |光流 TX|7|Serial1 TX，接光流模块 RX|
 |SBUS RX|44|Serial2 RX，100Kbps，25字节帧|
 |SBUS TX|9|Serial2 TX|
 |LED|21|板载 NEOPIXEL|
-|MOTOR 0|4|LEDC PWM 10KHz → A03400 → 左后（CW）|
+|电池电压|1 / A0|`VBAT_SW × 0.5` 分压输入|
+|MOTOR 0|4|LEDC PWM 10 kHz → AO3400 → 左后（CW）|
 |MOTOR 1|3|右后（CW）|
 |MOTOR 2|6|右前（CCW）|
 |MOTOR 3|5|左前（CCW）|
-
-##### 2.3 循环执行顺序
-
-```cpp
-#define WIFI_ENABLED 1       // 启用 WiFi MAVLink
-#define OPTICAL_FLOW_ENABLED 1 // 启用光流传感器
-```
-
-主循环保持固定的数据依赖顺序：先采集传感器，再更新时间、估计状态和执行控制，最后输出电机并处理通信与日志。相机 MJPEG 服务运行在较低优先级任务中，飞控 `loopTask` 保持更高优先级：
-
-```cpp
-void loop() {
-    readIMU();
-    step();
-    readRC();
-    readOpticalFlow();
-    updateBaro();
-    estimate();
-    estimateHeight();
-    estimateHorizontalVelocity();
-    control();
-    sendMotors();
-    handleInput();
-    processMavlink();
-    readVoltage();
-    logData();
-    syncParameters();
-}
-```
 
 #### 3. 核心子系统详解
 
@@ -489,17 +469,17 @@ v = flow × (1/10000) × height(m) / dt(s)
 
 - 起飞判定由解锁、油门大于 0.12、光流数据新鲜和 ToF 有效共同决定，并持续满足 250 ms 后生效。
 
-##### 3.3 飞行控制（control.ino）
+##### 3.3 飞行控制（control.ino + control_*.ino）
 
-**五种飞行模式**
+**递进控制模式**
 
 | 模式 | 值 | 行为 |
 |---|---|---|
-|STAB|2|默认。油门直通+姿态自稳。RC 摇杆映射角度指令。|
-|ALT_HOLD|4|ToF 定高模式。进入后记录当前高度，飞手油门作为基础推力，高度 PID 在其上叠加修正。|
-|POS_HOLD|5|光流定点模式。定高接入且光流、ToF、姿态和偏航条件满足后锁定当前位置；移动 Roll/Pitch 摇杆时平移目标点。|
-|ACRO|1|角速度控制模式，直接把摇杆映射到角速度目标|
-|AUTO|3|MAVLink 外部控制模式，可接收 SET_ATTITUDE_TARGET 或 SET_ACTUATOR_CONTROL_TARGET|
+|STAB|2|默认姿态自稳模式。油门直接映射总推力，Roll/Pitch 摇杆映射姿态目标。|
+|ALT_HOLD|4|ToF 定高模式。中位油门保持目标高度，偏离中位时给出有界垂直速度指令；总推力由悬停前馈与高度 PID 组成。|
+|POS_HOLD|5|光流定点模式。在定高和水平估计合格后锁定位置；Roll/Pitch 摇杆以速度方式移动目标点。|
+
+`AUTO` 是自动起降与经过验证的 Offboard 控制使用的内部控制权状态，不是飞手第四种模式。三种对外模式复用同一姿态、角速度和混控内环，并按 ToF 与光流状态的可用性逐层增加垂直和水平闭环。
 
 **模式切换（RC 通道 6）**
 
@@ -520,11 +500,13 @@ ch6 > 75%      → POS_HOLD
 
 | 参数 | 默认值 | 说明 |
 |---|---:|---|
-|定高 PID|P=0.8, I=0.1, D=0.2|编译常量；修正量限制为 ±0.2，积分限制为 ±0.3|
-|`POS_HOLD_P`|0.50|位置误差到水平速度目标的比例增益|
-|`POS_STICK_V`|0.50 m/s|Roll/Pitch 满杆对应的目标点移动速度|
-|`POS_VEL_P_X/Y`|0.20 / 0.20|水平速度闭环比例增益|
-|`POS_VEL_I_X/Y`|0 / 0|水平速度闭环积分增益|
+|定高 PID|以当前固件注册值为准|设备参数可能由 NVS 覆盖；使用 `p ALT_P`、`p ALT_I`、`p ALT_D` 回读|
+|`ALT_HOVER`|0.49|重启后的悬停推力基线；起飞后只在 RAM 中缓慢自适应|
+|`ALT_VEL_MAX`|0.45 m/s|油门离开中位死区后的最大垂直速度指令|
+|`POS_HOLD_P`|0.80|位置误差到水平速度目标的比例增益|
+|`POS_STICK_V`|0.70 m/s|Roll/Pitch 满杆对应的目标点移动速度|
+|`POS_VEL_P_X/Y`|0.30 / 0.30|水平速度闭环比例增益|
+|`POS_VEL_I_X/Y`|0.10 / 0.10|水平速度闭环积分增益，单轴输出限制为 0.08 rad|
 |`POS_VEL_D_X/Y`|0 / 0|水平速度闭环微分增益|
 |`POS_CMD_RATE`|1.20 rad/s|定点姿态指令变化率限制|
 |`FLOW_GYRO_P/R`|-0.78 / -0.77|Pitch/Roll 旋转光流补偿系数|
@@ -536,13 +518,14 @@ ch6 > 75%      → POS_HOLD
 
 | 消息 | 频率 | 说明 |
 |---|---|---|
-|HEARTBEAT (#0)|2 Hz|type=QUADROTOR, autopilot=GENERIC, base_mode=armed/disarmed|
-|EXTENDED_SYS_STATE|2 Hz|上报 landed / in-air 状态|
-|BATTERY_STATUS|2 Hz|上报电池字段；启用电压采样引脚后使用|
+|HEARTBEAT / CURRENT_MODE|2 Hz|上报 GENERIC 四旋翼身份、当前自定义模式和解锁状态|
+|EXTENDED_SYS_STATE / SYS_STATUS|2 Hz|上报着陆、传感器健康和系统状态|
+|BATTERY_STATUS|2 Hz|配置电压采样引脚后上报实测电压；默认硬件返回未知值|
 |ATTITUDE_QUATERNION|10 Hz|四元数姿态与角速度，按 MAVLink FRD 坐标约定转换|
 |RC_CHANNELS_RAW (#35)|~10 Hz|16 通道原始 PWM 值|
 |ACTUATOR_CONTROL_TARGET|10 Hz|当前 4 路电机归一化输出|
 |SCALED_IMU|10 Hz|加速度计与陀螺仪数据|
+|LOCAL_POSITION_NED / DISTANCE_SENSOR|10 Hz|上报机载相对位置/速度与有效 ToF 距离|
 
 **接收的关键消息**
 
@@ -551,145 +534,70 @@ ch6 > 75%      → POS_HOLD
 |MANUAL_CONTROL|外部手动控制，映射到油门、俯仰、横滚、偏航|
 |PARAM_REQUEST_LIST / PARAM_REQUEST_READ / PARAM_SET|参数读取与设置|
 |MAV_CMD_COMPONENT_ARM_DISARM|MAVLink 解锁/上锁，油门高于 0.05 时拒绝解锁|
-|MAV_CMD_DO_SET_MODE|切换 `RAW/ACRO/STAB/AUTO`；定高与定点由 RC 三段开关选择|
-|SET_ATTITUDE_TARGET|AUTO 模式下接收姿态、角速度和推力目标|
-|SET_ACTUATOR_CONTROL_TARGET|AUTO 模式下直接接收电机控制量|
-|SERIAL_CONTROL|通过 MAVLink 透传 CLI 命令|
+|MAV_CMD_DO_SET_MODE / DO_SET_STANDARD_MODE|切换受支持的自稳、定高、定点和 AUTO 模式|
+|MAV_CMD_NAV_TAKEOFF / MAV_CMD_NAV_LAND|执行有传感器门控的自动起飞和降落|
+|SET_ATTITUDE_TARGET|连续预热后在 AUTO 模式接收姿态、角速度和推力目标|
+|SET_POSITION_TARGET_LOCAL_NED|在 AUTO 模式接收有界局部位置/速度和高度/垂直速度目标|
+|SERIAL_CONTROL|仅把本地诊断文字镜像到 MAVLink；不接收入站远程 Shell|
+
+Minimal 固件不接受 MAVLink 直接电机控制。标准参数协议只应在上锁状态使用；飞行中的控制入口限于受门控的生命周期命令、手动控制租约和 Offboard 位置/速度目标。
 
 ##### 3.5 ROS2/MAVROS 接入说明
 
-仓库中的 `ros2_open32drone` 功能包在上位机运行，通过 MAVROS 连接飞控 UDP 14550，并将板载相机的 MJPEG 视频发布为 ROS 2 图像话题。飞控默认建立 AP `open32drone`，密码 `12345678`，地址为 `192.168.4.1`。
+仓库中通过 MAVROS 连接飞控 UDP 14550，并提供IMU/里程计/ToF/电池/RC 接口、`/cmd_vel`、`/goal_pose`、生命周期命令、TF、RViz2 和验收工具。飞控默认建立 AP `open32drone`，也可显式加入路由器 STA；同一架飞机同一时刻只能由 Android 或 ROS 2 控制。当前 ROS 包不转发实验性 HTTP MJPEG，也不提供 `camera_info`。安装、单机/多机命名、公共接口和受监督起降流程统一见[ROS 2 配套软件与自动飞行](docs/AUTOMATIC_FLIGHT_AND_ROS2.zh-CN.md)。
 
 **架构**
 
 ```python
-ComponentContainer("open32drone")
-├── mavros::Router  ← UDP → ESP32 (AP: 192.168.4.1:14550 / STA: 查看串口 wifi 输出)
-│   ├── fcu_urls: udp://:14550@<飞控IP>:14550
-│   ├── gcs_urls: udp://0.0.0.0:14551@            (向地面站转发)
-│   └── uas_urls: /open32drone_uas                (内部)
-└── mavros::UAS     ← Router → ROS topics
-    namespace: /open32drone
+open32drone_driver
+├── MAVROS                 ← UDP 14550 → Open32Drone
+├── interface_bridge       ← Reliable IMU/odom/ToF/battery/RC + diagnostics + TF
+├── flight_manager         ← arm/takeoff/land/mode 命令
+├── offboard_control       ← 20 Hz 位置/速度目标与看门狗
+└── rc_bridge              ← 显式启用的原始 RC 流
 ```
 
 **关键参数**
 
 | 参数 | 值 | 说明 |
 |---|---|---|
-|fcu_urls|udp://:14550@<飞控IP>:14550|AP 模式使用 192.168.4.1；STA 模式使用串口 `wifi` 输出的 STA IP|
-|gcs_urls|udp://0.0.0.0:14551@|同时向地面站转发，用 14551 避免与飞控 14550 冲突|
-|system_id|255|GCS 系统 ID（标准 MAVLink 约定）|
-|component_id|240|MAVROS 组件 ID（标准值）|
-|target_system_id|1|飞控 SYSTEM_ID=1（与代码 mavlink.ino 一致）|
-|target_component_id|1|飞控组件号|
-|fcu_protocol|v2.0|MAVLink v2|
-|connection_timeout|10.0|连接超时 10 秒|
-|heartbeat_interval|1.0|心跳 1 Hz|
-|timeout_heartbeat|5.0|5 秒无心跳判定离线|
-|enable_autopilot_version_check|false|跳过版本检查（自定义飞控无标准版本号）|
-
-**插件白名单**
-
-启用的 MAVROS 插件：sys_status / command / param / manual_control / imu。`open32drone.launch.py` 还会启动 MJPEG 相机节点，发布 `image_raw` 与 `image_raw/compressed`。
-
-**IMU 噪声参数**
-
-```text
-imu/frame_id: base_link
-imu/linear_acceleration_stdev: 0.0003
-imu/angular_velocity_stdev: 0.000349
-imu/orientation_stdev: 1.0
-```
-
-**Topic 重映射**
-
-```text
-/open32drone/UAS1/imu/data → /imu/data
-/open32drone/UAS1/imu/data_raw → /imu/data_raw
-/open32drone/UAS1/manual_control/send → /manual_control
-```
-
-**QoS 配置（IMU）**
-
-```text
-history: keep_last, depth: 10
-reliability: best_effort
-durability: volatile
-```
+|fcu_url|udp://0.0.0.0:14550@192.168.4.1:14550|AP 模式默认连接；STA 模式替换为串口 `wifi` 输出的地址|
+|tgt_system / tgt_component|1 / 1|Open32Drone 飞控的 MAVLink 目标标识|
+|setpoint rate|20 Hz|Offboard 节点持续刷新位置或速度目标|
+|warmup|至少 0.35 s、5 个样本、10 Hz|飞控在切入 AUTO 前检查目标流连续性|
+|watchdog|0.30 s|外部目标停更后触发机载 Offboard 失效处置|
+|public QoS|Reliable|`/imu/data`、`/odom`、`/range/downward` 等桥接话题面向普通 ROS 工具|
 
 ##### 3.6 ROS 2 手动控制命令速查
 
-**解锁与上锁**
-
-```text
-# 解锁
-ros2 service call /osdrone/arming mavros_msgs/srv/CommandBool "{value: true}"
-
-# 上锁
-ros2 service call /osdrone/arming mavros_msgs/srv/CommandBool "{value: false}"
-```
-
-**手动飞行控制**
-
-通过 `/osdrone/send` topic 发送 ManualControl 消息，四轴参数范围均为 **[-1000, 1000]**。
+教程只保留最短操作路径；接口表、多机命名、TF、验收规则和故障处理见独立 ROS 2 文档。自动起飞由固件统一完成预检、解锁、爬升和定点交接，成功后再发送有限时长的机体系速度目标。
 
 | 动作 | 参数 | 命令 |
 |---|---|---|
-|悬停|油门 200|`ros2 topic pub /osdrone/send mavros_msgs/msg/ManualControl "{x:0,y:0,z:200,r:0,buttons:0}" --once`|
-|前进|俯仰 +300|`ros2 topic pub /osdrone/send mavros_msgs/msg/ManualControl "{x:300,y:0,z:500,r:0,buttons:0}" --once`|
-|后退|俯仰 -300|`ros2 topic pub /osdrone/send mavros_msgs/msg/ManualControl "{x:-300,y:0,z:500,r:0,buttons:0}" --once`|
-|右移|横滚 +300|`ros2 topic pub /osdrone/send mavros_msgs/msg/ManualControl "{x:0,y:300,z:500,r:0,buttons:0}" --once`|
-|左移|横滚 -300|`ros2 topic pub /osdrone/send mavros_msgs/msg/ManualControl "{x:0,y:-300,z:500,r:0,buttons:0}" --once`|
-|右转|偏航 +200|`ros2 topic pub /osdrone/send mavros_msgs/msg/ManualControl "{x:0,y:0,z:500,r:200,buttons:0}" --once`|
-|左转|偏航 -200|`ros2 topic pub /osdrone/send mavros_msgs/msg/ManualControl "{x:0,y:0,z:500,r:-200,buttons:0}" --once`|
+|起飞|相对起飞面 0.65 m|`ros2 run open32drone_driver control takeoff --height 0.65`|
+|前进|+X，0.25 m/s，1.5 s|`ros2 run open32drone_driver control velocity 0.25 0.00 0.00 --duration 1.5`|
+|左移|+Y，0.25 m/s，1.5 s|`ros2 run open32drone_driver control velocity 0.00 0.25 0.00 --duration 1.5`|
+|上升|+Z，0.20 m/s，1 s|`ros2 run open32drone_driver control velocity 0.00 0.00 0.20 --duration 1`|
+|降落|受控下降并自动上锁|`ros2 run open32drone_driver control land`|
 
-**注意**：每次 `--once` 命令仅发送一帧。持续飞行需循环发送，或写节点代码以一定频率发布。
+`/cmd_vel` 使用机体系（+X 前、+Y 左、+Z 上）；`/goal_pose` 是 `open32drone/odom` 中的绝对目标。一次只保留一个控制源，自动试飞前先拆桨运行 `ros2 run open32drone_driver bench_test --duration 5`，并用 `control status` 核对真实连接。
 
-**飞行模式切换**
+##### 3.7 A/B 固件升级与 Minimal 套件
 
-使用 MAVLink `MAV_CMD_DO_SET_MODE`（command=176），param1=1.0 表示 base_mode=CUSTOM，param2 为子模式编号。
+当前开发配置使用 ESP32-S3 8 MB `default_8MB` A/B 分区：`ota_0` 位于 `0x10000`，`ota_1` 位于 `0x340000`，每个应用槽大小为 `0x330000`。旧单应用分区必须先通过 USB 完成一次迁移；后续无线升级只写入非活动槽。
 
-| 模式 | param2 | ROS 2 命令 |
-|---|---|---|
-|MANUAL|0.0|`ros2 service call /osdrone/command mavros_msgs/srv/CommandLong "{command:176,param1:1.0,param2:0.0}"`|
-|ACRO|1.0|`ros2 service call /osdrone/command mavros_msgs/srv/CommandLong "{command:176,param1:1.0,param2:1.0}"`|
-|STAB|2.0|`ros2 service call /osdrone/command mavros_msgs/srv/CommandLong "{command:176,param1:1.0,param2:2.0}"`|
-|AUTO|3.0|`ros2 service call /osdrone/command mavros_msgs/srv/CommandLong "{command:176,param1:1.0,param2:3.0}"`|
+`releases/minimal/` 中的匹配文件用途如下：
 
-**参数读写**
+| 文件 | 用途 |
+|---|---|
+|`Open32Drone-minimal-merged.bin`|完整 8 MiB USB 镜像；写入 `0x0`，用于新 MCU 或完整擦除后的恢复|
+|`Open32Drone-minimal-app.bin`|仅用于地面 A/B OTA 的应用镜像|
+|`Open32Drone-Controller-0.1.apk`|匹配 Android 客户端，`versionName 0.1`、`versionCode 1`|
+|`SHA256SUMS`|刷写或上传前校验文件完整性|
 
-```text
-# 拉取全部参数到本地
-ros2 service call /osdrone/pull mavros_msgs/srv/ParamPull "{force_pull: true}"
+首次迁移必须拆桨，并在需要保留校准时避免 `erase-flash`。迁移完成后执行 `sys`、`imu`、`flow` 和 `ota`，确认两个应用槽、陀螺仪校准、ToF、控制循环和本机 OTA 令牌均正常。无线升级前必须上锁、落地并停止自动飞行、Offboard 和图传；Android 或 ROS 2 上传器只能选择应用 `.bin`，不能选择 merged 镜像。上传器会发送令牌、文件长度和 SHA-256，新槽只有在启动后连续通过参数区、IMU、姿态、循环频率、ToF 和 MAVLink 健康检查才会被确认，否则 Bootloader 回滚到上一槽。
 
-# 监听参数事件获取参数列表
-ros2 topic echo /parameter_events
-
-# 读取指定参数
-ros2 service call /osdrone/get_parameters rcl_interfaces/srv/GetParameters "{names: ["CTL_R_RATE_P", "CTL_P_RATE_P", "CTL_Y_RATE_P"]}"
-```
-
-**写入参数**
-
-```text
-ros2 service call /osdrone/set mavros_msgs/srv/ParamSetV2 "{force_set: true, param_id: "CTL_R_RATE_P", value: {type: 3, double_value: 0.15}}"
-```
-
-type 对应 MAVLink MAV_PARAM_TYPE：1=uint8, 2=int8, 3=uint16, 4=int16, 5=uint32, 6=int32, 9=float（实际 double_value）。飞控代码中参数多为 float（type=9）。
-
-**使用注意事项**
-
-- ManualControl 每 `--once` 只发一帧，需要代码循环才能持续控制
-
-- 油门 z 范围 [0, 1000]，对应飞控中 0~100% 推力
-
-- 俯仰/横滚 [-1000, 1000] 映射到最大倾角 `CTL_TILT_MAX`（默认 30°）；偏航映射到 `CTL_Y_RATE_MAX`
-
-- 切换模式后需等待心跳确认，QGC 或 `ros2 topic echo /osdrone/state` 可查看当前模式
-
-- 上锁前确保油门=0，否则飞控不会响应上锁命令
-
-##### 3.7 CLI 调试命令
+##### 3.8 CLI 调试命令
 
 USB 串口 115200bps，当前 `cli.ino` 同时兼容 UART0 与 ESP32-S3 USB Serial/JTAG，提供以下常用命令：
 
@@ -706,12 +614,22 @@ USB 串口 115200bps，当前 `cli.ino` 同时兼容 UART0 与 ESP32-S3 USB Seri
 | `time` | 循环频率、平均/最大周期和 overrun | 检查实时循环负载 |
 | `ca` / `cr` | 加速度计六面标定 / SBUS 遥控器标定 | 首次装机或重装后使用 |
 | `wifi` | AP/STA、IP、客户端和 MAVLink 状态 | 检查网络连接 |
-| `ap <ssid> <password>` | 保存 AP 名称和密码 | 修改无线网络配置，重启后生效 |
+| `ap <ssid> <password>` / `sta <ssid> <password>` | 保存 AP 或路由器 STA 配置 | 重启后生效；STA 连接失败会打开恢复 AP |
 | `arm` / `disarm` | 串口解锁 / 上锁 | 拆桨调试用 |
-| `raw` / `stab` / `acro` / `auto` | 手动切换调试模式 | 串口调试控制链 |
+| `stab` / `alt` / `pos` | 切换三种飞行模式 | 串口拆桨调试控制链 |
 | `mfr` / `mfl` / `mrr` / `mrl` | 单电机测试 | 必须拆桨，用于确认电机序号 |
 | `log` / `log dump` | RAM 日志表头 / CSV 数据 | 飞后分析姿态、速度、位置和光流 |
+| `perf` | 分阶段循环耗时统计 | 上锁状态下评估 300 Hz 主循环与后台负载 |
+| `ota` | A/B 升级状态和设备令牌 | 配套 Android/ROS 2 上传器的本地鉴权信息 |
 | `sys` / `reset` / `reboot` | 系统信息 / 姿态复位 / 重启 | 查看运行状态和维护固件 |
+
+##### 3.9 Android 客户端与配套版本
+
+要求 Android 8.0（API 26）及以上。一个可配置的飞机 IPv4 地址统一用于 MAVLink、可选图传和 OTA；客户端提供定高/定点、自动起降、双摇杆、状态诊断和 A/B 应用镜像上传。
+
+使用顺序为：连接 `open32drone` Wi-Fi，等待 MAVLink 与 ToF 就绪，选择辅助模式，完成解锁/起飞，飞行结束后执行降落并确认上锁。图传只有收到新鲜 MJPEG 帧后才替换默认背景；断流不会冻结旧画面。实体 SBUS 飞手产生明确动作后取得普通控制权，手机停止发送普通摇杆指令；紧急上锁入口仍保留。
+
+Minimal Android APK、固件和 ROS 2 包是一组匹配接口。安装或刷写前应核对 `SHA256SUMS`，不要混用不同提交的组件。Android 与 ROS 2 不能同时控制同一架飞机；QGC 仅用于地面参数维护。当前 APK 为 Debug 签名，适合开发和受控测试，不应作为正式签名的产品发行包。
 
 #### 4. 调参建议
 
@@ -738,13 +656,13 @@ USB 串口 115200bps，当前 `cli.ino` 同时兼容 UART0 与 ESP32-S3 USB Seri
 
 ##### 4.3 定高
 
-当前定高采用“飞手基础油门 + PID 修正”。先在 `STAB` 中找到接近悬停的油门，再以相近油门切入 `ALT_HOLD`；高度目标在模式接入时自动记录。
+当前定高采用“悬停推力前馈 + 高度 PID”，油门摇杆在辅助模式中解释为以 50% 为中位的垂直速度指令。首次调试应先在 `STAB` 估计悬停推力并写入 `ALT_HOVER`；进入 `ALT_HOLD` 后回中保持高度，上/下拨杆移动高度目标。地面解锁后电机保持怠速，油门超过起飞触发阈值并持续 0.20 s 才启动受限推力斜坡。
 
 | 现象 | 优先调整 |
 |---|---|
-| 切入 `ALT_HOLD` 后修正量不足 | 将基础油门保持在接近悬停位置 |
-| 高度上下震荡 | 检查 ToF 反射面，并适当降低定高 P/D 编译常量 |
-| 高度响应迟钝 | 确认 `alt` 中 `AltHold=1`，再适当增加定高 P 编译常量 |
+| 切入 `ALT_HOLD` 后推力不足 | 检查 `ALT_HOVER` 与运行时 `hoverEstimate`，不要用摇杆偏置代替前馈标定 |
+| 高度上下震荡 | 检查 ToF 反射面，并适当降低 `ALT_P` / `ALT_D` |
+| 高度响应迟钝 | 确认 `alt` 中定高已接入，再小幅调整 `ALT_P` 或 `ALT_VEL_MAX` |
 | 无法接入定高 | 查看 `alt` 的 `Reject` 和 ToF 高度 |
 
 ##### 4.4 光流方向与定点
@@ -780,12 +698,33 @@ USB 串口 115200bps，当前 `cli.ino` 同时兼容 UART0 与 ESP32-S3 USB Seri
 | 控制用速度 | `velocity.x/y/z` |
 | 光流链 | `flowRaw.x/y`、`flowComp.x/y`、`flowFilt.x/y`、`flowGyro.x/y` |
 | 位置控制 | `targetPosX/Y`、`targetVel.x/y`、`velError.x/y`、`posRollCmd`、`posPitchCmd` |
-| 门控与诊断 | `flowAgeMs`、`flowPosGate`、`posHoldGate`、`flowReject`、`posReject`、`altReject` |
-| 控制输出 | `thrustTarget`、`motor.rl/rr/fr/fl`、`posSaturated`、`motorSaturated` |
+| 门控与诊断 | `flowAgeMs`、`flowPosGate`、`posHoldGate`、`flowReject`、`posReject`、`altReject`、`actuatorOwner`、`autoPhase`、`posFallback` |
+| 控制输出 | `thrustTarget`、`motor.rl/rr/fr/fl`、`mixerScale`、`posSaturated`、`motorSaturated` |
 
-日志以 50 Hz 保存最近约 6 秒的飞行数据。解除锁定后执行 `log dump`，用表格或 Python/Matlab 绘制姿态、高度、光流、位置目标、控制指令和电机输出。
+RAM 日志以 25 Hz 保存最近约 12 秒的飞行数据，解除锁定后使用 `log dump` 导出；飞行中禁止批量导出。`perf` 使用每 16 个控制周期一次的阶段采样评估 IMU、输入、估计、控制、CLI、MAVLink 和维护路径的耗时。安全模块保留失联下降和一个持续姿态门限的最小翻覆停桨，不进行碰撞分类，也没有独立事故缓冲。
 
-#### 5. 故障排查表
+#### 5. 飞行前检查与分阶段验收
+
+每次新装机、改动飞行关键代码或更换传感器后，按以下顺序推进：
+
+```mermaid
+flowchart LR
+  BUILD["编译与静态检查"] --> BENCH["拆桨检查"]
+  BENCH --> RESTRAINED["低功率约束测试"]
+  RESTRAINED --> FLIGHT["受控低空飞行"]
+  FLIGHT --> EVIDENCE["参数 · 日志 · 版本记录"]
+```
+
+| 阶段 | 必做项目 | 进入下一阶段的条件 |
+|---|---|---|
+|软件|固定 ESP32 Core/分区配置编译；检查测试和凭据|构建成功，版本与参数来源明确|
+|拆桨|`sys`、`imu`、`rc`、`flow`；校准；四路单电机；RC/Offboard 超时|传感器方向、电机顺序、拒绝逻辑和停桨路径正确|
+|低功率约束|检查预转、起飞斜坡、定高接入、定点门控、自动降落和持续翻覆门限|输出连续且有界，人工接管有效，无异常饱和|
+|受控飞行|依次验证 STAB、ALT_HOLD、POS_HOLD，再验证自动起降和外部控制|姿态稳定，高度/位置修正方向正确，失效时按预期退化|
+
+飞行前确认机架方向、电机/桨叶安装、飞控固定、地面纹理与照明、ToF 反射条件和场地隔离。开机后保持静止，直到 `imu` 显示陀螺仪校准完成；用 `rc` 检查摇杆和三段开关，用 `flow` 分别确认 ToF 与水平光流状态。首次带桨只做短时低空 STAB，确认人工恢复后再进入定高和定点。每轮只改变一个因素，并记录固件版本、硬件、参数、环境和 RAM 日志。
+
+#### 6. 故障排查表
 
 | 现象 | 可能原因 | 解决方法 |
 |---|---|---|
