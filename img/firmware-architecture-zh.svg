@@ -1,0 +1,50 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1280" height="360" viewBox="0 0 1280 360" role="img" aria-labelledby="title desc">
+  <title id="title">Open32Drone 固件架构</title>
+  <desc id="desc">传感器输入依次经过状态估计、控制和混控输出，并连接 MAVLink、日志及可选 Wi-Fi 图传。</desc>
+  <defs>
+    <marker id="arrow" viewBox="0 0 10 10" refX="9" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse">
+      <path d="M 0 0 L 10 5 L 0 10 z" fill="#586069"/>
+    </marker>
+    <style>
+      .box { fill: #f6f8fa; stroke: #57606a; stroke-width: 2; rx: 10; }
+      .accent { fill: #ddf4ff; stroke: #0969da; }
+      .optional { fill: #fff8c5; stroke: #9a6700; }
+      .line { fill: none; stroke: #586069; stroke-width: 2.2; marker-end: url(#arrow); }
+      .both { marker-start: url(#arrow); }
+      text { fill: #24292f; font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", "Microsoft YaHei", sans-serif; font-size: 17px; text-anchor: middle; dominant-baseline: middle; }
+    </style>
+  </defs>
+
+  <path class="line" d="M230 105 H280"/>
+  <path class="line" d="M500 105 H550"/>
+  <path class="line" d="M770 105 H820"/>
+  <path class="line" d="M1040 105 H1090"/>
+  <path class="line" d="M390 145 V255 H820"/>
+  <path class="line" d="M660 145 V215 H820 V255"/>
+  <path class="line" d="M770 285 H820"/>
+  <path class="line both" d="M1040 255 H1090"/>
+
+  <rect class="box" x="20" y="65" width="210" height="80"/>
+  <text x="125" y="105">IMU · SBUS · 光流/ToF</text>
+
+  <rect class="box accent" x="280" y="65" width="220" height="80"/>
+  <text x="390" y="96"><tspan x="390">姿态 · 高度</tspan><tspan x="390" dy="25">速度 · 位置估计</tspan></text>
+
+  <rect class="box accent" x="550" y="65" width="220" height="80"/>
+  <text x="660" y="96"><tspan x="660">控制权 · 保护</tspan><tspan x="660" dy="25">自动起降</tspan></text>
+
+  <rect class="box" x="820" y="65" width="220" height="80"/>
+  <text x="930" y="96"><tspan x="930">定高/定点</tspan><tspan x="930" dy="25">姿态/角速度环</tspan></text>
+
+  <rect class="box" x="1090" y="65" width="170" height="80"/>
+  <text x="1175" y="96"><tspan x="1175">Quad-X 混控</tspan><tspan x="1175" dy="25">PWM</tspan></text>
+
+  <rect class="box optional" x="500" y="245" width="270" height="80"/>
+  <text x="635" y="276"><tspan x="635">可选低优先级</tspan><tspan x="635" dy="25">相机/HTTPD 任务</tspan></text>
+
+  <rect class="box" x="820" y="215" width="220" height="80"/>
+  <text x="930" y="255">MAVLink · CLI · 日志</text>
+
+  <rect class="box optional" x="1090" y="215" width="170" height="80"/>
+  <text x="1175" y="255">Wi-Fi · MJPEG</text>
+</svg>

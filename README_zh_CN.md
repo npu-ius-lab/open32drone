@@ -102,17 +102,7 @@
 
 固件以固定 300 Hz 的主循环组织飞行关键链路。每个节拍依次完成传感器采集、状态估计、控制目标选择、定高/定点与姿态稳定、电机输出；CLI、MAVLink 和 OTA 验证分别限频至 100、150 和 50 Hz。可选图传由低优先级后台任务承载，不参与控制调度。
 
-```mermaid
-flowchart LR
-  S["IMU · SBUS · 光流/ToF"] --> E["姿态 · 高度 · 速度 · 位置估计"]
-  E --> C["控制权 · 保护 · 自动起降"]
-  C --> L["定高/定点 · 姿态/角速度环"]
-  L --> M["Quad-X 混控 · PWM"]
-  E --> O["MAVLink · CLI · 日志"]
-  C --> O
-  N["可选低优先级相机/HTTPD 任务"] --> W["Wi-Fi · MJPEG"]
-  O <--> W
-```
+![Open32Drone 固件架构](img/firmware-architecture-zh.svg)
 
 | 层次 | 主要文件 | 职责 |
 | --- | --- | --- |

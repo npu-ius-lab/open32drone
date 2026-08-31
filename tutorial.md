@@ -90,7 +90,7 @@ Reference price: 4.5 RMB
 ##### ToF Optical-Flow Module
 
 <p align="center">
-    <img src="img\tof.PNG" />
+    <img src="img\tof.png" />
 </p>
 
 Model: CORVON link protocol
@@ -102,7 +102,7 @@ Reference price: 68 RMB
 ##### Motor Driver Chip
 
 <p align="center">
-    <img src="img\mos.PNG" />
+    <img src="img\mos.png" />
 </p>
 
 Model: AO3400 MOSFET
@@ -114,7 +114,7 @@ Reference price: 0.4 RMB for 4 pieces
 ##### Remote Controller
 
 <p align="center">
-    <img src="img\controller.PNG" />
+    <img src="img\controller.png" />
 </p>
 
 Model: Flysky i6S single controller
@@ -126,7 +126,7 @@ Reference price: 249 RMB
 ##### Receiver
 
 <p align="center">
-    <img src="img\receiver.PNG" />
+    <img src="img\receiver.png" />
 </p>
 
 Model: Flysky A8S receiver, SBUS receiver
@@ -142,11 +142,11 @@ Motor sockets, battery, pin headers, female headers, and related small parts.
 #### 2. Baseboard Fabrication
 
 <p align="center">
-    <img src="img\pcb1.PNG" />
+    <img src="img\pcb1.png" />
 </p>
 
 <p align="center">
-    <img src="img\pcb2.PNG" />
+    <img src="img\pcb2.png" />
 </p>
 
 Model: Custom board
@@ -158,31 +158,31 @@ PCB link: https://oshwhub.com/fanchewang/open32drone
 ##### 2.1 Open the Design
 
 <p align="center">
-    <img src="img\design1.PNG" />
+    <img src="img\design1.png" />
 </p>
 
 ##### 2.2 Order the PCB
 
 <p align="center">
-    <img src="img\design2.PNG" />
+    <img src="img\design2.png" />
 </p>
 
 <p align="center">
-    <img src="img\design3.PNG" />
+    <img src="img\design3.png" />
 </p>
 
 <p align="center">
-    <img src="img\design4.PNG" />
+    <img src="img\design4.png" />
 </p>
 
 Keep the other options at their default values.
 
 <p align="center">
-    <img src="img\design5.PNG" />
+    <img src="img\design5.png" />
 </p>
 
 <p align="center">
-    <img src="img\design6.PNG" />
+    <img src="img\design6.png" />
 </p>
 
 #### 3. Drone Assembly
@@ -192,7 +192,7 @@ Keep the other options at their default values.
 Resistors: 0805 package, 10K or 20K are both acceptable.
 
 <p align="center">
-    <img src="img\all_stuff.PNG" />
+    <img src="img\all_stuff.png" />
 </p>
 
 ##### 3.2 Tool Preparation
@@ -218,7 +218,7 @@ If the female headers are soldered first, their tall plastic bodies will block t
 **Warning**: MOSFETs have polarity and orientation. Check the PCB silkscreen direction carefully. If a MOSFET is reversed, the motor may spin at full speed immediately after power-on, which can easily cause a crash.
 
 <p align="center">
-    <img src="img\hanjie1.PNG" />
+    <img src="img\hanjie1.png" />
 </p>
 
 ###### Step 2: Solder Module Connectors (Female Headers and Pin Headers)
@@ -232,7 +232,7 @@ Once the SMD parts are secure, solder the connectors used for plug-in modules.
 - **Soldering point**: female headers have many pins. It is recommended to solder two diagonal pins first for positioning, confirm that the connector is vertical, and then solder the remaining pins.
 
 <p align="center">
-    <img src="img\hanjie2.PNG" />
+    <img src="img\hanjie2.png" />
 </p>
 
 ###### Step 3: Solder Interface Components (Battery and Motors)
@@ -278,13 +278,13 @@ https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32
 ```
 
 <p align="center">
-    <img src="img\software1.PNG" />
+    <img src="img\software1.png" />
 </p>
 
 Go to **Tools > Board > Boards Manager...**, enter **esp32** in the search box, and install **esp32 3.3.6**, matching the project validation environment.
 
 <p align="center">
-    <img src="img\software2.PNG" />
+    <img src="img\software2.png" />
 </p>
 
 - **Step 4.** Select your board and port.
@@ -292,7 +292,7 @@ Go to **Tools > Board > Boards Manager...**, enter **esp32** in the search box, 
 At the top of Arduino IDE, you can directly select the port. It will likely be COM3 or higher. **COM1** and **COM2** are usually reserved for hardware serial ports. In the board selector on the left, search for **xiao** and select **XIAO_ESP32S3**.
 
 <p align="center">
-    <img src="img\software3.PNG" />
+    <img src="img\software3.png" />
 </p>
 
 After completing the preparation above, you can start writing, compiling, and uploading programs for XIAO ESP32-S3.
@@ -328,25 +328,25 @@ By now, you should have a basic understanding of XIAO ESP32-S3 features and hard
 - **Step 2.** Go to **File > Examples > 01.Basics > Blink** and open the example.
 
 <p align="center">
-    <img src="img\software4.PNG" />
+    <img src="img\software4.png" />
 </p>
 
 - **Step 3.** Select **XIAO ESP32-S3** as the board model, choose the correct port, and upload the program.
 
 <p align="center">
-    <img src="img\software5.PNG" />
+    <img src="img\software5.png" />
 </p>
 
 After the program is uploaded successfully, you will see the following output, and the orange LED on the right side of XIAO ESP32-S3 will blink.
 
 <p align="center">
-    <img src="img\software6.PNG" />
+    <img src="img\software6.png" />
 </p>
 
 ##### 1.5 Dependency Library Installation
 
 <p align="center">
-    <img src="img\software7.PNG" />
+    <img src="img\software7.png" />
 </p>
 
 The standard build uses Arduino-ESP32 `3.3.6`, `FlixPeriph 1.10.4`, `MAVLink 2.0.25`, and SBUS. Select `XIAO_ESP32S3`, enable OPI PSRAM, and use the `default_8MB` A/B application partition with DIO Flash. The default IMU backend supports MPU6500/MPU9250; ICM20948 and MPU6050 are separate compile configurations that require their own validation. Minimal has no barometer-control path.

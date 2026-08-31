@@ -91,7 +91,7 @@
 ##### TOF光流模块
 
 <p align="center">
-    <img src="img\tof.PNG" />
+    <img src="img\tof.png" />
 </p>
 
 规格型号：CORVON link协议
@@ -103,7 +103,7 @@
 ##### 电机驱动芯片
 
 <p align="center">
-    <img src="img\mos.PNG" />
+    <img src="img\mos.png" />
 </p>
 
 规格型号：MOS场效应管AO3400
@@ -115,7 +115,7 @@
 ##### 遥控器
 
 <p align="center">
-    <img src="img\controller.PNG" />
+    <img src="img\controller.png" />
 </p>
 
 规格型号：福斯I6S单控
@@ -126,7 +126,7 @@
 
 ##### 接收器
 <p align="center">
-    <img src="img\receiver.PNG" />
+    <img src="img\receiver.png" />
 </p>
 规格型号：福斯A8S接收器，SBUS接收器
 
@@ -141,11 +141,11 @@
 #### 2. 底板加工
 
 <p align="center">
-    <img src="img\pcb1.PNG" />
+    <img src="img\pcb1.png" />
 </p>
 
 <p align="center">
-    <img src="img\pcb2.PNG" />
+    <img src="img\pcb2.png" />
 </p>
 
 规格型号：自制
@@ -157,31 +157,31 @@
 ##### 2.1 打开设计图
 
 <p align="center">
-    <img src="img\design1.PNG" />
+    <img src="img\design1.png" />
 </p>
 
 ##### 2.2 PCB下单
 
 <p align="center">
-    <img src="img\design2.PNG" />
+    <img src="img\design2.png" />
 </p>
 
 <p align="center">
-    <img src="img\design3.PNG" />
+    <img src="img\design3.png" />
 </p>
 
 <p align="center">
-    <img src="img\design4.PNG" />
+    <img src="img\design4.png" />
 </p>
 
 其他基本默认选择
 
 <p align="center">
-    <img src="img\design5.PNG" />
+    <img src="img\design5.png" />
 </p>
 
 <p align="center">
-    <img src="img\design6.PNG" />
+    <img src="img\design6.png" />
 </p>
 
 #### 3. 无人机组装
@@ -191,7 +191,7 @@
 电阻（0805规格10K 20K都可以）
 
 <p align="center">
-    <img src="img\all_stuff.PNG" />
+    <img src="img\all_stuff.png" />
 </p>
 
 ##### 3.2 工具准备
@@ -217,7 +217,7 @@
 **⚠️ 避坑指南**：MOS 管具有方向性，请务必核对 PCB丝印（图标）的方向，焊反将导致上电后电机直接全速旋转，极易炸机。
 
 <p align="center">
-    <img src="img\hanjie1.PNG" />
+    <img src="img\hanjie1.png" />
 </p>
 
 ###### 步骤二：焊接模块插座 (排母与排针)
@@ -231,7 +231,7 @@
 - **焊接要点**：排母引脚较多，建议先焊对角线的两个引脚进行定位，确认位置垂直后再焊剩余引脚。
 
 <p align="center">
-    <img src="img\hanjie2.PNG" />
+    <img src="img\hanjie2.png" />
 </p>
 
 
@@ -278,14 +278,14 @@ https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32
 ```
 
 <p align="center">
-    <img src="img\software1.PNG" />
+    <img src="img\software1.png" />
 </p>
 
 
 依次进入 **Tools > Board > Boards Manager...**，在搜索框中输入关键字 **esp32**，安装与工程验证环境一致的 **esp32 3.3.6**。
 
 <p align="center">
-    <img src="img\software2.PNG" />
+    <img src="img\software2.png" />
 </p>
 
 - **步骤 4.** 选择你的开发板和端口。
@@ -293,7 +293,7 @@ https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32
 在 Arduino IDE 顶部，你可以直接选择端口。它很可能是 COM3 或更高（**COM1** 和 **COM2** 通常保留给硬件串口）。同时，在左侧的开发板中搜索 **xiao**。选择 **XIAO_ESP32S3**。
 
 <p align="center">
-    <img src="img\software3.PNG" />
+    <img src="img\software3.png" />
 </p>
 
 完成以上准备后，你就可以开始为 XIAO ESP32-S3 编写程序并进行编译和上传了。
@@ -329,25 +329,25 @@ https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32
 - **步骤 2.** 依次进入 **File > Examples > 01.Basics > Blink**，打开该程序。
 
 <p align="center">
-    <img src="img\software4.PNG" />
+    <img src="img\software4.png" />
 </p>
 
 - **步骤 3.** 将开发板型号选择为 **XIAO ESP32-S3**，并选择正确的端口号后上传程序。
 
 <p align="center">
-    <img src="img\software5.PNG" />
+    <img src="img\software5.png" />
 </p>
 
 当程序成功上传后，你会看到如下输出信息，并且可以观察到 XIAO ESP32-S3 右侧的橙色 LED 正在闪烁。
 
 <p align="center">
-    <img src="img\software6.PNG" />
+    <img src="img\software6.png" />
 </p>
 
 ##### 1.5 依赖库安装
 
 <p align="center">
-    <img src="img\software7.PNG" />
+    <img src="img\software7.png" />
 </p>
 
 标准构建使用 Arduino-ESP32 `3.3.6`、`FlixPeriph 1.10.4`、`MAVLink 2.0.25` 和 SBUS。选择 `XIAO_ESP32S3` 后启用 OPI PSRAM，使用 `default_8MB` A/B 应用分区与 DIO Flash。默认 IMU 后端兼容 MPU6500/MPU9250；ICM20948 和 MPU6050 仅作为需要单独验证的编译配置。Minimal 固件没有气压计控制路径。
