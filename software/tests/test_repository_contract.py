@@ -70,6 +70,7 @@ class RepositoryContractTests(unittest.TestCase):
 
     def test_bilingual_document_pairs(self):
         docs = ROOT / "docs"
+        localized_site_entrypoints = {"index.md"}
         expected = {
             "GETTING_STARTED.md",
             "TROUBLESHOOTING.md",
@@ -78,10 +79,14 @@ class RepositoryContractTests(unittest.TestCase):
             "CODE_WALKTHROUGH.md",
             "DEVELOPMENT.md",
             "CAPABILITIES.md",
+            "SIMULATION_MODEL.md",
         }
         english = sorted(
             path for path in docs.glob("*.md")
-            if not path.name.endswith(".zh-CN.md")
+            if (
+                not path.name.endswith(".zh-CN.md")
+                and path.name not in localized_site_entrypoints
+            )
         )
         self.assertEqual({path.name for path in english}, expected)
         translated_names = {
@@ -89,7 +94,7 @@ class RepositoryContractTests(unittest.TestCase):
         }
         self.assertEqual(
             {path.name for path in docs.glob("*.md")},
-            expected | translated_names,
+            expected | translated_names | localized_site_entrypoints,
         )
         for path in english:
             translated = path.with_name(path.stem + ".zh-CN.md")

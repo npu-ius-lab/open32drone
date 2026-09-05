@@ -83,96 +83,12 @@ Close the loop among perception, planning, and control at a very small scale:
 
 ---
 
-## Hardware Overview
-
-To balance reproducibility and maintainability, the hardware uses a modular **baseboard + modules** architecture.
-
-| Physical View | Core Component | Key Parameters | Key Features / Resources |
-| :---: | :--- | :--- | :--- |
-| <img src="img/pcb1.png" width="100"> <br/> <img src="img/pcb2.png" width="100"> | **Base PCB** | EasyEDA | Used only as a carrier board, with four onboard MOS motor drivers. Complete **[PCB project files](https://oshwhub.com/fanchewang/open32drone)** are provided. Solder four MOSFETs and several connectors to complete the baseboard. |
-| <img src="img/esp32.png" width="100"> | **Main Controller Module** | SeeedStudio XIAO ESP32S3 Sense | Dual-core 240 MHz with PSRAM; runs the 300 Hz flight stack while streaming remains an optional background service. |
-| <img src="img/frame.png" width="100"> | **Frame Structure** | 75/85 mm | A commercial ducted frame is recommended. The repository also provides an **STL 3D-printable model**. |
-| <img src="img/motor.png" width="100"> | **Propulsion Motor** | 8520 brushed coreless motor (8.5 mm x 20 mm) | **1.0 mm** shaft diameter, with more payload margin than 720 motors. |
-| <img src="img/paddle.png" width="100"> | **Propeller** | 76 mm | High lift efficiency, essential for accurate optical-flow position-hold hovering. |
-
----
-
-## Firmware Structure
-
-The flight-critical path runs in a fixed 300 Hz main loop. Each cycle reads sensors, advances state estimation, selects control targets, runs altitude/position and stabilization control, and writes the motors. CLI, MAVLink, and OTA validation are rate-limited to 100, 150, and 50 Hz. Optional video runs as a lower-priority background service outside control scheduling.
-
-```mermaid
-flowchart LR
-  S["IMU · SBUS · flow/ToF"] --> E["attitude · height · velocity · position"]
-  E --> C["ownership · safety · automatic flight"]
-  C --> L["altitude/position · attitude/rate loops"]
-  L --> M["Quad-X mixing · PWM"]
-  E --> O["MAVLink · CLI · logs"]
-  C --> O
-  N["optional low-priority camera/HTTPD task"] --> W["Wi-Fi · MJPEG"]
-  O <--> W
-```
-
-| Layer | Main files | Responsibility |
-| --- | --- | --- |
-| Entry and scheduling | `firmware.ino`, `time.ino` | Initialization, monotonic time, loop order, and task priority |
-| Sensor input | `imu_backend.h`, `imu.ino`, `rc.ino`, `flow.ino` | Compile-time IMU backend, SBUS, and TF-0850 optical-flow/ToF packets |
-| State estimation | `estimate.ino` | Attitude, ToF height/vertical speed, flow velocity, and relative position |
-| Flight control | `control.ino`, `control_*.ino` | Shared control state plus dedicated modules for modes/ownership, Offboard, automatic flight, altitude, position, and stabilization |
-| Safety and power | `safety.ino`, `power.ino` | Arm checks, link-loss descent, sustained-tip motor stop, voltage measurement, and bounded hover-thrust feedforward |
-| Actuation | `motors.ino` | Quad-X mapping and 10 kHz, 10-bit PWM |
-| Communications | `mavlink.ino`, `wifi.ino`, `camera.ino`, `ota.ino` | MAVLink, AP/STA networking, optional MJPEG, and ground-only A/B OTA |
-| Diagnostics | `cli.ino`, `log.ino` | Local serial diagnostics, 25 Hz RAM flight logs, and loop-performance sampling |
-| Configuration and math | `parameters.ino`, `*.h` | Parameter validation/NVS plus PID, filtering, quaternion, and vector tools |
-
-See the [flight-control firmware architecture](tutorial.md#2-flight-control-firmware-architecture) section of the tutorial for the complete startup order, main loop, and file responsibilities.
-
----
-
-## Pin Definitions
-
-| Peripheral | GPIO | Description |
-|---|---:|---|
-| I2C SDA | 2 | Compile-time selected IMU |
-| I2C SCL | 43 | Compile-time selected IMU, 400 kHz |
-| Optical-flow RX | 8 | ESP32 `Serial1` RX, connected to optical-flow TX |
-| Optical-flow TX | 7 | ESP32 `Serial1` TX, connected to optical-flow RX |
-| SBUS RX | 44 | ESP32 `Serial2` RX |
-| SBUS TX | 9 | ESP32 `Serial2` TX |
-| LED | 21 | Onboard NEOPIXEL |
-| Battery voltage | 1 / A0 | `VBAT_SW × 0.5` divider input |
-| MOTOR 0 | 4 | Rear left |
-| MOTOR 1 | 3 | Rear right |
-| MOTOR 2 | 6 | Front right |
-| MOTOR 3 | 5 | Front left |
-
----
-
-## Quick Start
-
-1. Install Arduino IDE 2.x.
-2. Install ESP32 Arduino Core 3.3.6.
-3. Open `firmware/firmware.ino`.
-4. Select `XIAO_ESP32S3`, enable OPI PSRAM, and use the `default_8MB` A/B application partition with DIO Flash.
-5. Make sure Arduino IDE can find `FlixPeriph 1.10.4`, `MAVLink 2.0.25`, and SBUS. The standard build uses the MPU6500/MPU9250 backend; ICM20948 and MPU6050 are separate compile configurations.
-6. Compile and flash.
-7. Open the serial monitor at 115200 bps and enter `help` to view commands.
-8. On first use, connect to Wi-Fi `open32drone` with password `12345678`; MAVLink uses UDP port `14550`. Configure router STA only when required; after an 8 s connection failure the firmware opens a recovery AP. The optional stream is `http://<aircraft-address>/stream`.
-
-For the complete full-stack tutorial, see:
-
-[Open32Drone: From Zero to Stable Flight](./tutorial.md)
-
----
-
 ## Documentation
 
 | Documentation | English | 简体中文 |
 | --- | --- | --- |
 | Project overview | [README](README.md) | [项目说明](README_zh_CN.md) |
 | Build, operation, and development | [Full Tutorial](tutorial.md) | [完整教程](tutorial_zh_CN.md) |
-| Firmware architecture | [Firmware Architecture](docs/FIRMWARE_ARCHITECTURE.md) | [固件架构](docs/FIRMWARE_ARCHITECTURE.zh-CN.md) |
-| ROS 2 and automatic flight | [ROS 2 & Automatic Flight](docs/AUTOMATIC_FLIGHT_AND_ROS2.md) | [ROS 2 配套软件与自动飞行](docs/AUTOMATIC_FLIGHT_AND_ROS2.zh-CN.md) |
 
 ---
 

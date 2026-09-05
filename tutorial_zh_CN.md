@@ -1,756 +1,1319 @@
-# Open32Drone：从 0 到稳飞
+# Open32Drone：从硬件制作到 ROS 2 与强化学习
 
-<p align="center">
-    <img src="img\drone.PNG" alt="Full drone view" />
-</p>
+[简体中文](tutorial_zh_CN.md) · [English](tutorial.md) · [项目总览](README_zh_CN.md)
 
-<p align="center">
-  <strong>
-    <a href="./tutorial_zh_CN.md">简体中文</a> &nbsp;|&nbsp;
-    <a href="./tutorial.md">English</a>
-  </strong>
-</p>
+![Open32Drone 参考样机](img/drone-complete.jpg)
 
+本教程按“制造硬件 → 刷写与首飞 → 调参 → ROS 控制 → 仿真与学习”的顺序组织，适用于本仓库配套的 Open32Drone Minimal。先使用匹配发布包完成首飞，需要修改固件时再阅读开发附录。
 
-## 一、项目简介
+文中的 `hardware/`、`firmware/`、`ros2/`、`simulation/` 和 `releases/minimal/` 都相对于完整源码仓库根目录；请先取得完整仓库，不能只下载本教程后直接运行命令。`/path/to/osrdrone` 是需要替换的示例路径。标注为 `bash` 的命令在 Linux/macOS 终端执行，`powershell` 在 Windows PowerShell 执行，`text` 中的设备命令逐行输入 115200 波特率串口。
 
-**Open32Drone Minimal** 是一个基于 **ESP32-S3** 的开源微型无人机平台，面向科研教育、嵌入式飞控开发与低空机器人实验。
+## 目录
 
-平台在轻量化嵌入式架构中集成惯性测量、光流/ToF、SBUS、四路有刷电机驱动、Wi-Fi/MAVLink 和 ROS 2 接口。单一 ESP32-S3 负责姿态稳定、辅助起降、低空定高/定点以及外部位置和速度控制；载板、传感器时序、相对状态估计、递进控制和配套应用共同构成一套匹配的系统实现。
+- [1. 项目介绍](#chapter-1)
+- [2. 制作目标与学习路线](#chapter-2)
+- [3. 硬件焊接与组装](#chapter-3)
+- [4. 固件、校准与起飞](#chapter-4)
+- [5. 飞行调参](#chapter-5)
+- [6. ROS 2 控制](#chapter-6)
+- [7. 仿真与强化学习](#chapter-7)
+- [附录 A：源码构建与架构](#development)
+- [附录 B：A/B OTA 与维护](#maintenance)
+- [附录 C：诊断速查与实验记录](#diagnostics)
 
-## 二、项目教程
+<a id="chapter-1"></a>
 
-### 阶段一：硬件与装配
+## 1. 项目介绍
 
-#### 器材准备
+### 一架从制造开始的微型无人机
 
-##### 主控模块
+Open32Drone 是一套需要亲手制作的开源四旋翼项目。制作者先用 3D 打印机完成机架，再使用配套生产文件向 PCB 厂下单底板，焊接分立器件和连接器，最后安装主控、传感器、电机、电池与桨叶。飞起来只是第一阶段，后续还可以继续修改固件、接入 ROS 2，并在 Gazebo 或 Isaac Sim 中完成强化学习实验。
 
-<p align="center">
-    <img src="img\seed-s3.PNG" />
-</p>
+项目采用模块化电子结构，并未交付一块集成好所有功能的成品飞控板。紫色 Open32Drone PCB 负责供电、四路有刷电机驱动和模块连接；XIAO ESP32-S3、IMU、光流/ToF 都是需要安装的独立模块。打印、下单、焊接、检查和装配因此成为项目的核心内容，而不是开机前的一段准备工作。
 
-规格型号：Seeed Studio XIAO ESP32-S3 Sense
+参考样机使用 8520 空心杯电机和 1S 电池完成室内飞行，以 ESP32-S3 运行 300 Hz 飞控，通过 IMU 感知姿态，通过向下安装的光流/ToF 一体模块保持水平位置和离地高度。
 
-参考价格：90元
+项目最初的飞控核心来自 Oleg Kalachev 的 Flix。Open32Drone 在这个基础上加入了实际主控板的引脚映射、四路有刷电机输出、光流/ToF 定高定点、电池电压补偿、自动起降、参数保存，以及 Android 和 ROS 2 控制接口。今天的仓库已经不仅是一份飞控代码，还包括机械文件、固件、手机控制端、ROS 驱动、仿真模型和强化学习示例。
 
-模块说明：https://wiki.seeedstudio.com/cn/xiao_esp32s3_getting_started/
+### 系统由哪些部分组成
 
-##### 机架桨叶
+飞机上的部件可以分成四层。
 
-<p align="center">
-    <img src="img\paddle1.PNG" />
-</p>
+| 层次 | 主要部件 | 作用 |
+| --- | --- | --- |
+| 结构与动力 | 打印机架、4 个 8520 电机、4 个 60/65 mm 桨叶、橡胶电机圈 | 承载零件并产生升力和姿态力矩 |
+| 飞控与传感 | Open32Drone PCB 底板、XIAO ESP32-S3、IMU、光流/ToF 一体模块 | 完成电机驱动、状态估计与控制计算 |
+| 能源与通信 | 1S 电池、SBUS 接收机、Wi-Fi | 给系统供电，并接收遥控或程序命令 |
+| 上位机与仿真 | Android APK、ROS 2、URDF/USD、Gazebo、Isaac Sim、PPO 示例 | 人工飞行、机器人编程、模型验证与学习控制 |
 
-<p align="center">
-    <img src="img\paddle2.PNG" />
-</p>
+PCB 底板把整个系统连接在一起。XIAO 模块提供计算和 Wi-Fi；IMU 是按固定轴向焊接在底板上的独立模块；光流与 ToF 共用一块向下看的模块并通过线束连接；四个电机由底板上的 MOSFET 直接驱动。相机属于可选外设，可用于图传和后续视觉实验；普通定点与现有强化学习示例不依赖相机。
 
-规格型号：12.3cm轴距机架，76mm桨叶（适配1mm轴径电机）
+### 一条完整的数据链
 
-需求：1个机架，4个桨叶
-
-参考价格：19元（1套价格）
-
-##### 空心杯电机
-
-<p align="center">
-    <img src="img\electric.PNG" />
-</p>
-
-规格型号：8520空心杯电机，轴径1mm
-
-需求：4个
-
-参考价格：24元（4个价格）
-
-##### IMU模块
-
-<p align="center">
-    <img src="img\imu.PNG" />
-</p>
-
-规格型号：GY-91 模块（MPU9250 + BMP280）。当前飞行配置关闭 BMP280，姿态使用 MPU9250，定高使用光流模块内置 ToF。
-
-需求：1个
-
-参考价格：14元（1个价格）
-
-##### 升压模块
-
-<p align="center">
-    <img src="img\up_voltage.PNG" />
-</p>
-
-规格型号：3.3V升压5V模块
-
-需求：1个
-
-参考价格：4.5元（1个价格）
-
-##### TOF光流模块
-
-<p align="center">
-    <img src="img\tof.png" />
-</p>
-
-规格型号：CORVON link协议
-
-需求：1个
-
-参考价格：68元（1个价格）
-
-##### 电机驱动芯片
-
-<p align="center">
-    <img src="img\mos.png" />
-</p>
-
-规格型号：MOS场效应管AO3400
-
-需求：4个
-
-参考价格：0.4元（4个价格）
-
-##### 遥控器
-
-<p align="center">
-    <img src="img\controller.png" />
-</p>
-
-规格型号：福斯I6S单控
-
-需求：1个
-
-参考价格：249元（1个价格）
-
-##### 接收器
-<p align="center">
-    <img src="img\receiver.png" />
-</p>
-规格型号：福斯A8S接收器，SBUS接收器
-
-需求：1个
-
-参考价格：65元（1个价格）
-
-##### 其他物料
-
-电机插座，电池，排针，排母若干
-
-#### 2. 底板加工
-
-<p align="center">
-    <img src="img\pcb1.png" />
-</p>
-
-<p align="center">
-    <img src="img\pcb2.png" />
-</p>
-
-规格型号：自制
-
-需求：需要1个
-
-图纸链接：https://oshwhub.com/fanchewang/open32drone
-
-##### 2.1 打开设计图
-
-<p align="center">
-    <img src="img\design1.png" />
-</p>
-
-##### 2.2 PCB下单
-
-<p align="center">
-    <img src="img\design2.png" />
-</p>
-
-<p align="center">
-    <img src="img\design3.png" />
-</p>
-
-<p align="center">
-    <img src="img\design4.png" />
-</p>
-
-其他基本默认选择
-
-<p align="center">
-    <img src="img\design5.png" />
-</p>
-
-<p align="center">
-    <img src="img\design6.png" />
-</p>
-
-#### 3. 无人机组装
-
-##### 3.1 物料清点
-
-电阻（0805规格10K 20K都可以）
-
-<p align="center">
-    <img src="img\all_stuff.png" />
-</p>
-
-##### 3.2 工具准备
-
-烙铁，焊锡丝
-
-##### 3.3 焊接流程
-
-###### 焊接核心原则：先贴片，后插件
-
-如果先焊排母，高耸的塑胶座会挡住烙铁头，导致贴片元件极难焊接,**务必先焊接底板上的 MOS 管、电阻等贴片元件，最后焊接排母和排针**。
-
-###### 步骤一：焊接动力 (MOSFET与电阻)
-
-**焊接技巧**：先焊接电阻，再焊接MOSFET
-
-1. 先给PCB上的一个焊盘上少许焊锡。
-
-2. 用镊子夹住元件对齐，加热焊盘使元件固定。
-
-3. 最后补焊剩余的引脚，确保焊点圆润。
-
-**⚠️ 避坑指南**：MOS 管具有方向性，请务必核对 PCB丝印（图标）的方向，焊反将导致上电后电机直接全速旋转，极易炸机。
-
-<p align="center">
-    <img src="img\hanjie1.png" />
-</p>
-
-###### 步骤二：焊接模块插座 (排母与排针)
-
-一旦贴片元件稳固，我们就可以焊接用于插接模块的接插件了。
-
-- **ESP32-S3接口**：焊接两排2.54mm排母，确保高度水平，否则主控板插上后会倾斜。
-
-- **传感器接口**：包含GY91模块接口、光流TOF二合一模块接口以及 5V 稳压模块接口。
-
-- **焊接要点**：排母引脚较多，建议先焊对角线的两个引脚进行定位，确认位置垂直后再焊剩余引脚。
-
-<p align="center">
-    <img src="img\hanjie2.png" />
-</p>
-
-
-###### 步骤三：焊接接口组件 (电池与电机)
-
-最后，我们需要完成输入与输出的连接。
-
-- **电机插座 (4个)**：焊接在四个角落。使用插座的好处是，当空心杯电机这种易损耗品出现问题时，可以像拔插座一样快速更换。
-
-- **电池连接线**：注意检查**电池正负极 (VCC/GND)**，并确保线材能够承受8520电机全速旋转时的瞬间大电流。
-
-###### 焊接后的检查清单 (Checklist)
-
-在插上ESP32-S3之前，请务必进行以下测试：
-
-1. **短路测试**：使用万用表蜂鸣档，检查电源正负极（5V与GND）是否短路。
-
-2. **导通测试**：检查 MOS 管的输出端（电机口）是否与对应的控制引脚通畅。
-
-3. **目测检查**：是否有连锡（引脚粘在一起）的情况，特别是MOS管和排母的密集引脚处。
-
-### 阶段三：软件与开发
-
-#### 1. 嵌入式开发环境搭建
-
-##### 1.1 Arduino IDE 安装
-
-Arduino IDE 是嵌入式开发中最常用的集成开发环境，支持 Windows、macOS 和 Linux 三大主流操作系统。本实验推荐使用 **Arduino IDE 2.x** 版本，相较于 1.x 版本，2.x 版本引入了现代化的编辑器内核，支持自动补全、智能提示、改进的库管理器以及实时串口监视器等功能，能够显著提升开发效率。
-
-当前固件使用 `arduino-esp32 3.3.6` 构建，建议教程与实际编译环境保持同一版本。
-
-- **步骤 1.** 根据你的操作系统下载并安装稳定版本的 Arduino IDE。
-
-https://www.arduino.cc/en/software/
-
-- **步骤 2.** 启动 Arduino 应用程序。
-
-- **步骤 3.** 向 Arduino IDE 中添加 ESP32 开发板包。
-
-依次进入 **File > Preferences**，在 **"Additional Boards Manager URLs"** 中填入以下链接：
+飞行控制每秒循环 300 次。IMU 提供角速度和加速度，ToF 提供离地高度，光流提供地面相对运动。飞控把这些测量组合成姿态、速度和位置估计，再根据驾驶员或 ROS 给出的目标计算四路电机输出。
 
 ```text
-https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+传感器测量 → 状态估计 → 姿态/高度/位置控制 → 电机混控 → 飞机运动
+       ↑                                                   │
+       └────────────────── 下一周期的新测量 ───────────────┘
 ```
 
-<p align="center">
-    <img src="img\software1.png" />
-</p>
+本项目的残差 PPO 示例目前运行于仿真，沿用“状态反馈—控制—动力学”的闭环结构；它尚未接入真机固件。在该示例中，基础几何控制器继续负责姿态和升力分配，神经网络学习三轴加速度修正，用来补偿风、动力变化和模型误差。这样既保留传统控制器清晰的结构，也便于比较学习方法在不同扰动下的收益与代价。
 
+### 参考样机
 
-依次进入 **Tools > Board > Boards Manager...**，在搜索框中输入关键字 **esp32**，安装与工程验证环境一致的 **esp32 3.3.6**。
+教程使用以下装机作为贯穿示例：
 
-<p align="center">
-    <img src="img\software2.png" />
-</p>
+- 机架外形约 103.3 × 103.3 mm；
+- 四个 8520 电机，8 × 20 mm，1 mm 轴；
+- 四个 60 mm 桨叶，两只 CW、两只 CCW；
+- 18350 1S 1300 mAh 电池，实测质量 25 g；
+- 含电池起飞重量约 81 g，水平重心位于机体中央；
+- XIAO ESP32-S3、MPU6500/MPU9250 IMU、光流/ToF 一体模块；
+- 物理 SBUS、Android APK、ROS 2 三种控制入口。
 
-- **步骤 4.** 选择你的开发板和端口。
+这套配置已经可以完成手动定高、光流定点、自动起降、ROS 速度/位置控制，以及 Isaac Sim 中的残差 PPO 演示。它也给后续工作留下了清晰接口：可以换传感器、加入相机算法、建立更精确的推力模型，或者把仿真策略逐步迁移到真机。
 
-在 Arduino IDE 顶部，你可以直接选择端口。它很可能是 COM3 或更高（**COM1** 和 **COM2** 通常保留给硬件串口）。同时，在左侧的开发板中搜索 **xiao**。选择 **XIAO_ESP32S3**。
+### 仓库地图
 
-<p align="center">
-    <img src="img\software3.png" />
-</p>
+| 目录 | 内容 |
+| --- | --- |
+| `hardware/` | 机架 3MF/STEP、机械规格和采购信息 |
+| `firmware/` | ESP32-S3 飞控源码 |
+| `android/` | 手机控制端源码 |
+| `ros2/` | ROS 2 驱动、控制命令、RViz 配置 |
+| `simulation/` | 教学实验、动力学、Gazebo/Isaac 与强化学习代码 |
+| `releases/minimal/` | 相互匹配的完整固件、OTA 镜像、APK 和 ROS 包 |
+| `docs/` | 安装、参数、故障排查与项目教程 |
 
-完成以上准备后，你就可以开始为 XIAO ESP32-S3 编写程序并进行编译和上传了。
+下一章先确定整条制作路线以及每个阶段会得到什么结果，然后开始制作硬件。
 
-##### 1.2 BootLoader 模式
+<a id="chapter-2"></a>
 
-有时，使用了错误的程序会导致 XIAO 丢失端口或无法正常工作。常见问题包括：
+## 2. 制作目标与学习路线
 
-- XIAO 已连接到电脑，但找不到端口号。
+这套项目将建立一条能够自己制造、维护、扩展和复现实验的无人机开发链。完成全部章节后，你将知道飞机怎样从数字文件变成真实硬件、为什么能够稳定飞行、问题出现在哪一层，以及怎样把一个控制想法从电脑送进仿真和真机接口。
 
-- XIAO 已连接并出现端口号，但程序上传失败。
+### 最终能完成什么
 
-当你遇到以上两种情况时，可以尝试让 XIAO 进入 BootLoader 模式，这可以解决大多数设备无法识别和上传失败的问题。具体方法如下：
+#### 做出一架真实可飞的飞机
 
-- **步骤 1**. 按住 XIAO ESP32-S3 上的 `BOOT` 按钮不要松开。
+你会打印机架，使用与硬件版本匹配的生产文件下单 PCB 裸板，按照 BOM 和位号图完成器件、连接器、供电小板与 IMU 的焊接，随后安装光流/ToF、XIAO、四个电机和电池。你会建立清楚的机头、电机编号和桨叶方向，并把每一步做成可以检查和复现的装配记录。
 
-- **步骤 2**. 保持按住 `BOOT` 按钮，然后通过数据线连接电脑。连接电脑后再松开 `BOOT` 按钮。
+#### 理解并刷入固件
 
-- **步骤 3**. 上传 **File > Examples > 01.Basics > Blink** 程序来检查 XIAO ESP32-S3 的运行情况。
+你会区分第一次 USB 完整刷写和以后使用的应用镜像，完成 IMU、遥控器和电池电压校准，并用拆桨电机测试确认四路输出。完成后可以在两种入口中任选一种起飞：
 
-##### 1.3 复位
+- 有 SBUS 接收机和遥控器时，使用实体摇杆与三段模式；
+- 没有接收机时，手机直接连接飞机热点，使用配套 Android APK 自动起飞和降落。
 
-当程序运行异常时，你可以在上电时按一次 `Reset`，让 XIAO 重新执行已上传的程序。
+#### 根据飞行现象调参
 
-当你在上电时按住 `BOOT` 键，然后再按一次 `Reset` 键，也可以进入 BootLoader 模式。
+你会把“飞得不好”拆成可观察的现象：快速抖动、缓慢摆动、定高上下跳、水平漂移、换电后下沉等。教程会给出对应的机械、传感器和控制参数检查顺序，并坚持每次只改一个变量。
 
-##### 1.4 运行你的第一个 Blink 程序
+#### 用 ROS 控制运动
 
-到现在为止，相信你已经对 XIAO ESP32-S3 的特性和硬件有了较好的了解。接下来，我们以最简单的 Blink 程序为例，让你的 XIAO ESP32-S3 完成第一次闪烁！
+你会在 ROS 2 中看到 IMU、距离、电池和里程计，调用自动起降命令，发送机体系速度和局部位置目标。随后把基本动作组合成前进、横移、转向、方形航线，并用 rosbag 保存一次实验。
 
-- **步骤 1.** 启动 Arduino 应用程序。
+#### 建立仿真与强化学习流程
 
-- **步骤 2.** 依次进入 **File > Examples > 01.Basics > Blink**，打开该程序。
+你会理解 URDF/USD 的 link、joint、质量和碰撞结构怎样对应真实飞机，使用 81 g 粗动力模型运行一个 CPU 悬停练习，再训练完整 PPO 残差策略。最后在 Isaac Sim 中观察策略完成八字穿环、螺旋爬升、定点停驻和阵风恢复。
 
-<p align="center">
-    <img src="img\software4.png" />
-</p>
-
-- **步骤 3.** 将开发板型号选择为 **XIAO ESP32-S3**，并选择正确的端口号后上传程序。
-
-<p align="center">
-    <img src="img\software5.png" />
-</p>
-
-当程序成功上传后，你会看到如下输出信息，并且可以观察到 XIAO ESP32-S3 右侧的橙色 LED 正在闪烁。
-
-<p align="center">
-    <img src="img\software6.png" />
-</p>
-
-##### 1.5 依赖库安装
-
-<p align="center">
-    <img src="img\software7.png" />
-</p>
-
-标准构建使用 Arduino-ESP32 `3.3.6`、`FlixPeriph 1.10.4`、`MAVLink 2.0.25` 和 SBUS。选择 `XIAO_ESP32S3` 后启用 OPI PSRAM，使用 `default_8MB` A/B 应用分区与 DIO Flash。默认 IMU 后端兼容 MPU6500/MPU9250；ICM20948 和 MPU6050 仅作为需要单独验证的编译配置。Minimal 固件没有气压计控制路径。
-
-#### 2. 飞控代码架构
-
-本节给出开发时需要的最短路径；完整的模块职责、控制权、后台服务与源码阅读顺序见[固件架构](docs/FIRMWARE_ARCHITECTURE.zh-CN.md)。
-
-##### 2.1 运行时结构
-
-当前固件不是“每个功能一个任务”的并行飞控。飞行关键路径集中在固定 300 Hz 的高优先级 `loopTask`：传感器采集完成后，状态估计、目标选择、飞行控制和电机输出按固定依赖顺序执行。CLI、MAVLink 与 OTA 启动验收在同一循环中限频服务；可选相机和 MJPEG HTTP 服务运行在低优先级 core-0 后台任务，不拥有控制权。
+### 推荐学习路线
 
 ```mermaid
-flowchart LR
-  INPUT["imu · rc · flow"] --> EST["estimate"]
-  EST --> SAFE["safety · ownership"]
-  SAFE --> CTRL["auto · altitude · position · attitude · rate"]
-  CTRL --> MOTOR["mix · PWM"]
-  MOTOR --> SERVICE["CLI · MAVLink · log · NVS"]
-  CAMERA["OV3660"] --> STREAM["低优先级 HTTPD 图传任务"]
+flowchart TD
+    A[3D 打印机架] --> B[下单 PCB 裸板]
+    B --> C[焊接 PCB]
+    C --> D[整机组装]
+    D --> E[USB 刷写与校准]
+    E --> F{选择首飞方式}
+    F -->|有 SBUS| G[遥控器定点首飞]
+    F -->|无接收机| H[Android APK 定点首飞]
+    G --> I[按现象调参]
+    H --> I
+    I --> J[ROS 起降与速度控制]
+    J --> K[ROS 位置与航线]
+    K --> L[URDF / USD 与动力模型]
+    L --> M[PPO 训练与 Isaac 演示]
 ```
 
-| 层次 | 文件 | 代码边界 |
-|---|---|---|
-|入口与调度|`firmware.ino`、`time.ino`|编译开关、初始化顺序、64 位单调时间、主循环与任务优先级|
-|输入|`imu_backend.h`、`imu.ino`、`rc.ino`、`flow.ino`|编译期选择的 IMU、SBUS 和 TF-0850 数据包；ToF 与 XY 光流分别维护序列、时间戳和健康状态|
-|估计|`estimate.ino`|姿态、ToF 高度/垂直速度，以及带角速度时间对齐的水平速度/相对位置|
-|控制|`control.ino`、`control_modes.ino`、`control_offboard.ino`、`control_auto_flight.ino`、`control_altitude.ino`、`control_position.ino`、`control_stabilization.ino`|共享控制状态，以及控制权、Offboard、自动起降、定高、定点、姿态和角速度各层|
-|安全与电源|`safety.ino`、`power.ino`|解锁预检、失联下降、持续翻覆停桨、电池电压与悬停推力前馈|
-|执行|`motors.ino`|Quad-X 映射与四路 LEDC PWM|
-|通信|`mavlink.ino`、`wifi.ino`、`camera.ino`、`ota.ino`|MAVLink、AP/STA 网络、可选图传和仅地面 A/B OTA|
-|观测|`cli.ino`、`log.ino`|本地串口诊断、25 Hz RAM 日志和每 16 圈一次的性能采样|
-|配置与数学|`parameters.ino`、`*.h`|参数校验/NVS、PID、滤波、四元数和向量工具|
+第一次制作建议完整走完打印、下单、焊接和装机过程。已有可飞样机的开发者可以从 ROS 章节开始；强化学习不要求先精通所有飞控公式，但需要理解坐标、速度、位置目标和闭环控制，因此建议先完成 ROS 的方形航线。
 
-TF-0850 数据由 `flow.ino` 接收，高度状态由 `estimate.ino` 更新，定高控制位于 `control_altitude.ino`。光流/ToF 模块安装在偏航旋转中心前方约 24 mm，固件在水平估计中补偿该几何偏移。
+### 开始前需要的基础
 
-##### 2.2 硬件引脚映射
+硬件部分需要基本的焊接、万用表和锂电池使用经验。软件部分需要能够在终端中切换目录并运行命令。ROS 与强化学习章节会逐条给出命令，不要求预先会写复杂节点；读者如果了解 Python、向量和 PID，会更容易理解背后的原理。
 
-以下引脚与底板硬件直接绑定，修改时务必确认底板电路图：
+真实飞行请使用有纹理、光照均匀的室内地面，周围至少留出 2 m 空间。焊接、刷写、校准和电机测试阶段均不安装桨叶；只有四路电机位置与转向确认后，才进入装桨首飞。
 
-| 外设 | GPIO | 说明 |
-|---|---|---|
-|I2C SDA|2|编译期选择的 IMU 数据线，400 kHz|
-|I2C SCL|43|编译期选择的 IMU 时钟线|
-|光流 RX|8|Serial1 RX，接光流模块 TX。协议：帧头 0xDF，19字节包，115200bps|
-|光流 TX|7|Serial1 TX，接光流模块 RX|
-|SBUS RX|44|Serial2 RX，100Kbps，25字节帧|
-|SBUS TX|9|Serial2 TX|
-|LED|21|板载 NEOPIXEL|
-|电池电压|1 / A0|`VBAT_SW × 0.5` 分压输入|
-|MOTOR 0|4|LEDC PWM 10 kHz → AO3400 → 左后（CW）|
-|MOTOR 1|3|右后（CW）|
-|MOTOR 2|6|右前（CCW）|
-|MOTOR 3|5|左前（CCW）|
+下一章从机架文件和 PCB 生产资料开始，把数字设计变成一架完整飞机。
 
-#### 3. 核心子系统详解
+<a id="chapter-3"></a>
 
-##### 3.1 光流传感器（flow.ino）
+## 3. 硬件焊接与组装
 
-**数据包格式**
+这一章从数字制造文件开始，最后得到一架完成焊接、装配和方向标记的飞机。Open32Drone 使用需要自行打印的机架、需要向板厂下单的 PCB 底板，以及分别安装的 XIAO、IMU 和光流/ToF 模块。整套硬件制作依次经过机架打印、PCB 下单、焊接检测和整机装配。
 
-| 字节 | 字段 | 说明 |
-|---|---|---|
-|0|Header|0xDF|
-|1~3|ID/Dev/Sta|0x15, 0x00, 0x55|
-|4|Len|0x0C（数据长 12 字节）|
-|6~7|ToF|uint16，mm 单位|
-|10~11|FlowX|int16，像素位移|
-|12~13|FlowY|int16，像素位移|
-|14~15|IntTime|uint16，μs 单位|
-|16|Valid|245 = 数据有效|
-|18|Checksum|前18字节和 & 0xFF|
+### 3.1 打印机架并下单 PCB
 
-**速度换算公式**
+#### 打印机架
+
+仓库中的 `hardware/3d-model/open32drone-frame.3mf` 是推荐的打印工程文件。导入切片软件后保持 100% 比例，主机架外形应约为 103.3 × 103.3 mm。根据实际打印机、喷嘴和材料检查层高、壁厚、支撑与首层附着；打印完成后清理支撑，确认四个电机安装位没有变形，PCB 安装孔能够自然对齐。
+
+`hardware/3d-model/open32drone-frame.stp` 用于修改结构或在其他 CAD 软件中检查尺寸。导入 STEP 后同样以 103.3 mm 左右的主机架外形复核单位，不要凭软件默认单位直接缩放。
+
+#### 向板厂下单 PCB 底板
+
+PCB 下单前准备同一硬件版本的四类文件：Gerber 与钻孔生产包、电子 BOM、正反面位号图、接口与电压定义。生产文件决定板厚、铜厚、表面处理、阻焊颜色和其他工艺选项；在板厂页面逐项按文件要求填写，不根据照片估计参数。
+
+收到裸板后先检查板框、槽孔、通孔、阻焊、焊盘和丝印，再将实物版本与 BOM、位号图对应。教程中的照片用于辨认真实结构和工序状态，不能替代生产文件或位号图。
+
+![主控 PCB 的正反面，丝印和接口清晰可见](img/pcb-bare-front-back.jpg)
+
+图 3-1　Open32Drone PCB 底板正反面。底板负责电源、电机驱动和模块连接，XIAO、IMU 与光流/ToF 需要另行安装。
+
+### 3.2 准备零件和工具
+
+标准样机需要以下部件：
+
+| 部件 | 规格 | 数量 |
+| --- | --- | ---: |
+| Open32Drone PCB 底板 | 与生产文件、电子 BOM、位号图配套 | 1 |
+| XIAO ESP32-S3 | 主控计算与 Wi-Fi | 1 |
+| IMU 模块 | MPU6500/MPU9250，固定在主控板上 | 1 |
+| 光流/ToF 一体模块 | 向下安装，配套线束 | 1 |
+| 打印机架 | 主体约 103.3 × 103.3 mm | 1 套 |
+| 8520 电机 | 8 × 20 mm、1 mm 轴、MX1.25 | 4 |
+| 电机橡胶圈 | 内孔 Ø8 mm、卡槽 2 mm | 4 |
+| 桨叶 | 60 mm 或 65 mm，同一直径，CW/CCW 各 2 | 4 |
+| PWA 自攻螺丝 | 1.4 × 4 × 4 mm | 12 |
+| 电池 | 1S；参考样机为 18350 1300 mAh、25 g | 1 |
+| SBUS 接收机 | 仅遥控器路线需要 | 0 或 1 |
+| 相机 | 图传或视觉扩展使用 | 0 或 1 |
+
+准备恒温烙铁或适合所用焊膏的加热设备、细头镊子、助焊剂、吸锡带、放大镜、万用表、螺丝刀、电子秤和非导电垫。焊接温度与回流曲线按焊料和器件的数据手册设置；照片里的热台读数只代表拍摄时的操作状态。
+
+### 3.3 焊接 PCB 底板
+
+#### 第一步：按 BOM 分组
+
+把阻容、二极管、MOSFET、连接器、排针和模块分别放在小格中。每次只拿出一组器件，在贴装图上完成一组就勾掉一组。有极性的器件先找 Pin 1、阴极或连接器开口方向。
+
+![PCB、连接器与模块展开](img/parts-layout.jpg)
+
+图 3-2　焊接前的 PCB、连接器、供电小板和 IMU。
+
+#### 第二步：先焊低矮贴片器件
+
+清洁焊盘，均匀施加焊膏或预上锡。按照“低矮、小封装在前，连接器和模块在后”的顺序贴装：
+
+1. 电阻、电容和小信号器件；
+2. MOSFET、二极管和其他有方向器件；
+3. 电机接口、电源开关等连接器；
+4. 排针、排母、供电小板和 IMU。
+
+器件放下后先从正上方看是否居中，再从侧面看两端是否都落在焊盘上。偏移的器件在加热前调整；已经形成锡桥时，用助焊剂和吸锡带处理，不要反复用烙铁推挤相邻器件。
+
+![贴片器件放置过程](img/smd-placement.jpg)
+
+图 3-3　贴片器件完成定位后的状态。板上的机头箭头始终作为方向基准。
+
+#### 第三步：完成回流或逐点焊接
+
+使用热台时，让 PCB 平整贴在工作面上，按焊料规定的预热、回流和冷却过程操作。观察焊料熔化后器件是否回正；焊完自然冷却，再移动电路板。使用烙铁时，先固定一个引脚，复查方向和位置，然后完成其余焊点。
+
+![连接器与贴片器件的焊接状态](img/connectors-soldered.jpg)
+
+图 3-4　连接器装好后的主板。连接器开口朝向要与外部线束的出线方向一致。
+
+#### 第四步：检查焊点
+
+用放大镜沿着电源入口、四路电机驱动、排针、连接器逐区检查。合格焊点应完整润湿焊盘和引脚，没有相邻短路、虚焊、翘脚或多余锡珠。
+
+![焊接后的主板正面](img/pcb-soldered.jpg)
+
+图 3-5　焊后正面。检查重点是四路电机输出与中央器件区。
+
+断电后用万用表检查电池正负极是否短路，并核对电源开关前后的连接。第一次供电使用限流电源或带保护的 1S 电池；发现异常发热、气味或电流快速上升时立即断电。
+
+#### 第五步：安装供电小板、排母和 IMU
+
+先装背面的供电小板，确认输入、输出和 GND 与主板丝印一致。再焊接 XIAO 使用的排母，让两排保持平行，XIAO 能够自然插入。
+
+![背面供电小板](img/power-board.jpg)
+
+图 3-6　背面供电小板与主板的安装关系。
+
+![排母与板间连接](img/headers.jpg)
+
+图 3-7　排母焊接完成后，从侧面检查高度和垂直度。
+
+IMU 是独立模块，但属于主控板组件。将模块按板上的轴向标识安装，焊接后保持刚性，不能让厚软泡棉使它晃动。标准固件的 IMU 安装旋转为 `roll=π`、`pitch=0`、`yaw=π/2`；使用配套 PCB 与图示方向即可对应这一设置。
+
+![IMU 模块的丝印与针脚](img/imu-module.jpg)
+
+![IMU 安装到主控板](img/imu-installed.jpg)
+
+图 3-8　IMU 模块及安装完成的主控板。
+
+到这里，主控板应包含电机驱动、电源部分、XIAO 排母和 IMU。光流/ToF 通过线束连接，在下一步随机架安装。
+
+### 3.4 组装机架和传感器
+
+#### 认识方向和电机编号
+
+把机头朝前，从机顶向下看：
 
 ```text
-v = flow × (1/10000) × height(m) / dt(s)
+                         机头 / +X
+                             ↑
+              M3 前左                     M2 前右
+
+          +Y（左）←        机体中心         → -Y（右）
+
+              M0 后左                     M1 后右
+                             ↓
+                         机尾 / -X
 ```
 
-**有效性条件**
+固件与模型使用同一套编号：
 
-- dataValid == true (byte 16 = 245)
+| 位置 | 编号 | GPIO | 拆桨测试命令 | 仿真 link |
+| --- | --- | ---: | --- | --- |
+| 后左 | M0 | 4 | `mrl` | `rotor_0_link` |
+| 后右 | M1 | 3 | `mrr` | `rotor_1_link` |
+| 前右 | M2 | 6 | `mfr` | `rotor_2_link` |
+| 前左 | M3 | 5 | `mfl` | `rotor_3_link` |
 
-- height: 0.05 m ~ 6 m
+#### 安装光流/ToF 一体模块
 
-- integrationTime > 0
+把机架翻到底面朝上，将光流/ToF 模块放入前部安装位。镜头和测距窗口朝地面，窗口不能被螺丝、胶带或线束遮挡。模块平面应与四个电机的推力平面平行；标准位置位于机体偏航中心前方约 24 mm，固件会补偿这段偏置。
 
-- 健康超时：150 ms 无有效数据 → unhealthy
+![光流与 ToF 一体模块的安装位置](img/flow-tof-install.jpg)
 
-##### 3.2 姿态解算（quaternion.h + estimate.ino）
+图 3-9　光流/ToF 一体模块固定在机架前部，线束穿入中央区域。
 
-**四元数姿态估计**
+#### 固定主控板
 
-- 陀螺仪角速度先经过低通滤波，再以旋转向量形式积分到姿态四元数。
+把机架恢复到正常姿态。整理光流/ToF 线束后放上主控板，使机头箭头与机架机头一致。四个安装孔先全部带上螺丝，再按对角顺序轻轻拧到贴合。主控板应保持平整，下面没有被压住的导线。
 
-- 落地静止时，加速度计以 `EST_ACC_WEIGHT=0.003` 修正估计重力方向。
+![主控板固定到机架](img/mainboard-install.jpg)
 
-- 飞行中仅在推力、加速度模长和角速度满足条件时，以较小的 `EST_LVL_WEIGHT=0.0002` 进行重力方向修正。
+图 3-10　主控板、IMU 和光流/ToF 的相对位置。
 
-- Roll、Pitch 和 Yaw 统一由四元数表示，避免欧拉角直接积分带来的轴间耦合。
+光流/ToF 使用 UART：模块 TX 接飞控 RX（GPIO8），模块 RX 接飞控 TX（GPIO7），波特率 115200。IMU 使用 I²C：SDA 为 GPIO2，SCL 为 GPIO43。使用配套线束时按 PCB 丝印插接，插拔时握住插头本体。
 
-**高度估计**
+#### 安装 XIAO 与可选接收机
 
-- 高度直接来自光流模块内置 ToF，`position.z` 保存滤波后的相对离地高度。
+检查排针无弯折后，把 XIAO ESP32-S3 垂直插入两排排母。USB-C 口应留在机架外侧可接近的位置。使用 SBUS 时，将接收机固定到预留区域并连接 RX/TX 与供电；只使用手机或 ROS 时可以不装接收机。
 
-- 相邻有效样本的高度差用于计算 `velocity.z`，再通过低通滤波抑制测距抖动。
+![XIAO 安装到主控板](img/xiao-install.jpg)
 
-- 单次高度跳变超过 0.45 m 时只接收 10% 的变化，并将最大高度变化率限制为 2 m/s。
+图 3-11　XIAO 插入主控板排母。
 
-- 电机停止且 ToF 无效时，高度和垂直速度复位。
+#### 安装橡胶圈和电机
 
-**水平速度与位置**
+把四个 Ø8 mm 电机橡胶圈压入机架卡槽，沿一圈检查边缘完全就位。再把 8520 电机从正确方向压入橡胶圈，四个电机保持同一高度，轴线彼此平行。操作时握住电机外壳，不推压 1 mm 转轴，也不拉扯电机线。
 
-- 光流位移按 ToF 高度和积分时间换算为速度，再使用 40 ms 历史角速度补偿纯旋转串扰，得到 `flowCompBodyVel`。
+![橡胶圈装入机架](img/motor-grommets.jpg)
 
-- 补偿速度依次经过地面偏置学习、三点中值滤波、创新限幅和低通平滑，再转换到世界坐标系。
+![8520 电机与橡胶圈的侧面关系](img/motor-install.jpg)
 
-- 控制用 `velocity.x/y` 和 `position.x/y` 只有在 `flowAirborne=true` 后才更新；未起飞时会进入地面零速锁定，避免地面纹理噪声让定点目标漂移。
+图 3-12　橡胶圈与电机。橡胶圈既固定电机，也隔离部分振动。
 
-- 起飞判定由解锁、油门大于 0.12、光流数据新鲜和 ToF 有效共同决定，并持续满足 250 ms 后生效。
+把电机线沿机臂引到对应接口，依照 M0—M3 逐条连接。保留轻微活动余量，并把所有线束移出桨盘。此时仍然不要安装桨叶。
 
-##### 3.3 飞行控制（control.ino + control_*.ino）
+![四路电机线束接入主控板](img/motor-wiring.jpg)
 
-**递进控制模式**
+图 3-13　电机线束接好后的状态。
 
-| 模式 | 值 | 行为 |
-|---|---|---|
-|STAB|2|默认姿态自稳模式。油门直接映射总推力，Roll/Pitch 摇杆映射姿态目标。|
-|ALT_HOLD|4|ToF 定高模式。中位油门保持目标高度，偏离中位时给出有界垂直速度指令；总推力由悬停前馈与高度 PID 组成。|
-|POS_HOLD|5|光流定点模式。在定高和水平估计合格后锁定位置；Roll/Pitch 摇杆以速度方式移动目标点。|
+#### 安装并居中电池
 
-`AUTO` 是自动起降与经过验证的 Offboard 控制使用的内部控制权状态，不是飞手第四种模式。三种对外模式复用同一姿态、角速度和混控内环，并按 ToF 与光流状态的可用性逐层增加垂直和水平闭环。
+参考样机使用 18350 1300 mAh 电池，实测 25 g。把电池固定在机体中央，使左右和前后重心都接近几何中心；电源线不会碰到桨叶，也不会压住光流/ToF 窗口。含电池、桨叶和实际附件称量，参考值约为 81 g。
 
-**模式切换（RC 通道 6）**
+![圆柱电池的中央安装方式](img/battery-install.jpg)
 
-```cpp
-ch6 < 25%       → STAB
-ch6 25% ~ 75%  → ALT_HOLD
-ch6 > 75%      → POS_HOLD
+图 3-14　圆柱电池安装在中央区域。每次换电后保持相同位置。
+
+如果增加相机、支架或更换软包电池，重新移动电池来恢复水平重心。相机的镜头朝向与排线弯曲半径按相机模块要求处理。
+
+### 3.5 电机与桨叶确认（完成第 4 章校准后执行）
+
+组装至此先保持无桨，完成[第 4 章的刷写、校准和电机测试](#chapter-4)，再回到本节安装桨叶。刷好固件后，在串口中依次运行：
+
+```text
+mrl
+mrr
+mfr
+mfl
 ```
 
-**解锁/上锁**
+每条命令只让对应电机以低输出转动 1 秒。用一小条纸带或手机慢动作观察，从机顶向下记录每个电机是 CW 还是 CCW。M0 与 M2 应为同一方向，M1 与 M3 为相反方向；在四个橡胶圈旁贴上 `M0 CW`、`M1 CCW` 这样的可移除标签。
 
-```cpp
-解锁：油门最低 + 偏航右打到底
-上锁：油门最低 + 偏航左打到底
-```
+桨叶上的 CW/CCW 表示它设计的旋转方向。把 CW 桨装到实测 CW 的电机，把 CCW 桨装到实测 CCW 的电机。四只桨必须同一直径，桨毂压到位但不摩擦电机外壳。
 
-**定高与定点主要参数**
+![桨叶安装位置参考](img/prop-install.jpg)
 
-| 参数 | 默认值 | 说明 |
-|---|---:|---|
-|定高 PID|以当前固件注册值为准|设备参数可能由 NVS 覆盖；使用 `p ALT_P`、`p ALT_I`、`p ALT_D` 回读|
-|`ALT_HOVER`|0.49|重启后的悬停推力基线；起飞后只在 RAM 中缓慢自适应|
-|`ALT_VEL_MAX`|0.45 m/s|油门离开中位死区后的最大垂直速度指令|
-|`POS_HOLD_P`|0.80|位置误差到水平速度目标的比例增益|
-|`POS_STICK_V`|0.70 m/s|Roll/Pitch 满杆对应的目标点移动速度|
-|`POS_VEL_P_X/Y`|0.30 / 0.30|水平速度闭环比例增益|
-|`POS_VEL_I_X/Y`|0.10 / 0.10|水平速度闭环积分增益，单轴输出限制为 0.08 rad|
-|`POS_VEL_D_X/Y`|0 / 0|水平速度闭环微分增益|
-|`POS_CMD_RATE`|1.20 rad/s|定点姿态指令变化率限制|
-|`FLOW_GYRO_P/R`|-0.78 / -0.77|Pitch/Roll 旋转光流补偿系数|
-|`FLOW_GYRO_DLY`|40 ms|光流与角速度的时间对齐|
+图 3-15　桨叶与四个电机的安装关系。最终方向以拆桨实测标签为准。
 
-##### 3.4 MAVLink 调试（mavlink.ino）
+安装前最后看一遍：主板方向正确，IMU 和光流/ToF 不松动，四个电机轴平行，电池居中，全部线束离开桨盘。下一章将先在无桨状态刷写和校准，完成后再回到这里安装桨叶。
 
-**发送的消息**
+![完成组装的 Open32Drone 参考样机](img/drone-complete.jpg)
 
-| 消息 | 频率 | 说明 |
-|---|---|---|
-|HEARTBEAT / CURRENT_MODE|2 Hz|上报 GENERIC 四旋翼身份、当前自定义模式和解锁状态|
-|EXTENDED_SYS_STATE / SYS_STATUS|2 Hz|上报着陆、传感器健康和系统状态|
-|BATTERY_STATUS|2 Hz|配置电压采样引脚后上报实测电压；默认硬件返回未知值|
-|ATTITUDE_QUATERNION|10 Hz|四元数姿态与角速度，按 MAVLink FRD 坐标约定转换|
-|RC_CHANNELS_RAW (#35)|~10 Hz|16 通道原始 PWM 值|
-|ACTUATOR_CONTROL_TARGET|10 Hz|当前 4 路电机归一化输出|
-|SCALED_IMU|10 Hz|加速度计与陀螺仪数据|
-|LOCAL_POSITION_NED / DISTANCE_SENSOR|10 Hz|上报机载相对位置/速度与有效 ToF 距离|
+图 3-16　完成组装的参考样机。相机为可选模块；普通定点飞行使用 IMU 与向下安装的光流/ToF。
 
-**接收的关键消息**
+<a id="chapter-4"></a>
 
-| 消息/命令 | 作用 |
-|---|---|
-|MANUAL_CONTROL|外部手动控制，映射到油门、俯仰、横滚、偏航|
-|PARAM_REQUEST_LIST / PARAM_REQUEST_READ / PARAM_SET|参数读取与设置|
-|MAV_CMD_COMPONENT_ARM_DISARM|MAVLink 解锁/上锁，油门高于 0.05 时拒绝解锁|
-|MAV_CMD_DO_SET_MODE / DO_SET_STANDARD_MODE|切换受支持的自稳、定高、定点和 AUTO 模式|
-|MAV_CMD_NAV_TAKEOFF / MAV_CMD_NAV_LAND|执行有传感器门控的自动起飞和降落|
-|SET_ATTITUDE_TARGET|连续预热后在 AUTO 模式接收姿态、角速度和推力目标|
-|SET_POSITION_TARGET_LOCAL_NED|在 AUTO 模式接收有界局部位置/速度和高度/垂直速度目标|
-|SERIAL_CONTROL|仅把本地诊断文字镜像到 MAVLink；不接收入站远程 Shell|
+## 4. 固件、校准与起飞
 
-Minimal 固件不接受 MAVLink 直接电机控制。标准参数协议只应在上锁状态使用；飞行中的控制入口限于受门控的生命周期命令、手动控制租约和 Offboard 位置/速度目标。
+硬件装好后，先保持四个电机都没有桨叶。本章会把完整固件写入 XIAO ESP32-S3，完成传感器与电压校准，再根据手上的设备选择 SBUS 遥控器或 Android 手机完成第一次定点起飞。
 
-##### 3.5 ROS2/MAVROS 接入说明
+### 4.1 认识发布包
 
-仓库中通过 MAVROS 连接飞控 UDP 14550，并提供IMU/里程计/ToF/电池/RC 接口、`/cmd_vel`、`/goal_pose`、生命周期命令、TF、RViz2 和验收工具。飞控默认建立 AP `open32drone`，也可显式加入路由器 STA；同一架飞机同一时刻只能由 Android 或 ROS 2 控制。当前 ROS 包不转发实验性 HTTP MJPEG，也不提供 `camera_info`。安装、单机/多机命名、公共接口和受监督起降流程统一见[ROS 2 配套软件与自动飞行](docs/AUTOMATIC_FLIGHT_AND_ROS2.zh-CN.md)。
-
-**架构**
-
-```python
-open32drone_driver
-├── MAVROS                 ← UDP 14550 → Open32Drone
-├── interface_bridge       ← Reliable IMU/odom/ToF/battery/RC + diagnostics + TF
-├── flight_manager         ← arm/takeoff/land/mode 命令
-├── offboard_control       ← 20 Hz 位置/速度目标与看门狗
-└── rc_bridge              ← 显式启用的原始 RC 流
-```
-
-**关键参数**
-
-| 参数 | 值 | 说明 |
-|---|---|---|
-|fcu_url|udp://0.0.0.0:14550@192.168.4.1:14550|AP 模式默认连接；STA 模式替换为串口 `wifi` 输出的地址|
-|tgt_system / tgt_component|1 / 1|Open32Drone 飞控的 MAVLink 目标标识|
-|setpoint rate|20 Hz|Offboard 节点持续刷新位置或速度目标|
-|warmup|至少 0.35 s、5 个样本、10 Hz|飞控在切入 AUTO 前检查目标流连续性|
-|watchdog|0.30 s|外部目标停更后触发机载 Offboard 失效处置|
-|public QoS|Reliable|`/imu/data`、`/odom`、`/range/downward` 等桥接话题面向普通 ROS 工具|
-
-##### 3.6 ROS 2 手动控制命令速查
-
-教程只保留最短操作路径；接口表、多机命名、TF、验收规则和故障处理见独立 ROS 2 文档。自动起飞由固件统一完成预检、解锁、爬升和定点交接，成功后再发送有限时长的机体系速度目标。
-
-| 动作 | 参数 | 命令 |
-|---|---|---|
-|起飞|相对起飞面 0.65 m|`ros2 run open32drone_driver control takeoff --height 0.65`|
-|前进|+X，0.25 m/s，1.5 s|`ros2 run open32drone_driver control velocity 0.25 0.00 0.00 --duration 1.5`|
-|左移|+Y，0.25 m/s，1.5 s|`ros2 run open32drone_driver control velocity 0.00 0.25 0.00 --duration 1.5`|
-|上升|+Z，0.20 m/s，1 s|`ros2 run open32drone_driver control velocity 0.00 0.00 0.20 --duration 1`|
-|降落|受控下降并自动上锁|`ros2 run open32drone_driver control land`|
-
-`/cmd_vel` 使用机体系（+X 前、+Y 左、+Z 上）；`/goal_pose` 是 `open32drone/odom` 中的绝对目标。一次只保留一个控制源，自动试飞前先拆桨运行 `ros2 run open32drone_driver bench_test --duration 5`，并用 `control status` 核对真实连接。
-
-##### 3.7 A/B 固件升级与 Minimal 套件
-
-当前开发配置使用 ESP32-S3 8 MB `default_8MB` A/B 分区：`ota_0` 位于 `0x10000`，`ota_1` 位于 `0x340000`，每个应用槽大小为 `0x330000`。旧单应用分区必须先通过 USB 完成一次迁移；后续无线升级只写入非活动槽。
-
-`releases/minimal/` 中的匹配文件用途如下：
+`releases/minimal/` 中最常用的三个文件是：
 
 | 文件 | 用途 |
-|---|---|
-|`Open32Drone-minimal-merged.bin`|完整 8 MiB USB 镜像；写入 `0x0`，用于新 MCU 或完整擦除后的恢复|
-|`Open32Drone-minimal-app.bin`|仅用于地面 A/B OTA 的应用镜像|
-|`Open32Drone-Controller-0.1.apk`|匹配 Android 客户端，`versionName 0.1`、`versionCode 1`|
-|`SHA256SUMS`|刷写或上传前校验文件完整性|
+| --- | --- |
+| `Open32Drone-minimal-merged.bin` | 第一次 USB 刷写使用，包含引导程序、分区表和应用 |
+| `Open32Drone-minimal-app.bin` | 飞机已经安装完整分区后，用于 A/B OTA 更新 |
+| `Open32Drone-Controller-0.1.apk` | Android 手机控制端 |
 
-首次迁移必须拆桨，并在需要保留校准时避免 `erase-flash`。迁移完成后执行 `sys`、`imu`、`flow` 和 `ota`，确认两个应用槽、陀螺仪校准、ToF、控制循环和本机 OTA 令牌均正常。无线升级前必须上锁、落地并停止自动飞行、Offboard 和图传；Android 或 ROS 2 上传器只能选择应用 `.bin`，不能选择 merged 镜像。上传器会发送令牌、文件长度和 SHA-256，新槽只有在启动后连续通过参数区、IMU、姿态、循环频率、ToF 和 MAVLink 健康检查才会被确认，否则 Bootloader 回滚到上一槽。
+新 XIAO、整片擦除后的 XIAO，以及第一次安装这套分区时，都从地址 `0x0` 写入 merged 镜像。app 镜像从属于已有分区，不能代替第一次完整刷写。
 
-##### 3.8 CLI 调试命令
+先进入 `releases/minimal/` 校验下载文件：
 
-USB 串口 115200bps，当前 `cli.ino` 同时兼容 UART0 与 ESP32-S3 USB Serial/JTAG，提供以下常用命令：
+```bash
+cd /path/to/osrdrone/releases/minimal
+shasum -a 256 -c SHA256SUMS       # macOS
+# sha256sum -c SHA256SUMS         # Linux
+```
 
-| 命令 | 输出内容 | 典型用途 |
-|---|---|---|
-| `help` | 全部命令 | 查看当前固件支持的 CLI |
-| `p` / `p <name>` / `p <name> <value>` | 参数列表、单参数、写参数 | 调 PID、估计器和光流参数；电机未转时保存到 NVS |
-| `ps` / `psq` | 欧拉角 / 四元数 | 快速确认姿态方向 |
-| `imu` | IMU、校准值和 landed 状态 | 检查传感器与六面标定 |
-| `rc` | 16 通道、归一化输入、模式和解锁状态 | 检查 SBUS 映射和三段开关 |
-| `flow` | ToF、光流速度、角速度补偿、位置、门控和拒绝码 | 检查定点估计链 |
-| `alt` | 定高接入、目标高度、ToF 高度、推力和拒绝码 | 检查定高控制链 |
-| `mot` | 四路电机输出 | 检查电机映射与混控方向 |
-| `time` | 循环频率、平均/最大周期和 overrun | 检查实时循环负载 |
-| `ca` / `cr` | 加速度计六面标定 / SBUS 遥控器标定 | 首次装机或重装后使用 |
-| `wifi` | AP/STA、IP、客户端和 MAVLink 状态 | 检查网络连接 |
-| `ap <ssid> <password>` / `sta <ssid> <password>` | 保存 AP 或路由器 STA 配置 | 重启后生效；STA 连接失败会打开恢复 AP |
-| `arm` / `disarm` | 串口解锁 / 上锁 | 拆桨调试用 |
-| `stab` / `alt` / `pos` | 切换三种飞行模式 | 串口拆桨调试控制链 |
-| `mfr` / `mfl` / `mrr` / `mrl` | 单电机测试 | 必须拆桨，用于确认电机序号 |
-| `log` / `log dump` | RAM 日志表头 / CSV 数据 | 飞后分析姿态、速度、位置和光流 |
-| `perf` | 分阶段循环耗时统计 | 上锁状态下评估 300 Hz 主循环与后台负载 |
-| `ota` | A/B 升级状态和设备令牌 | 配套 Android/ROS 2 上传器的本地鉴权信息 |
-| `sys` / `reset` / `reboot` | 系统信息 / 姿态复位 / 重启 | 查看运行状态和维护固件 |
+Windows 可在发布目录运行以下 PowerShell 命令，将每个文件的哈希与 `SHA256SUMS` 比较：
 
-##### 3.9 Android 客户端与配套版本
+```powershell
+Get-Content .\SHA256SUMS | ForEach-Object {
+    if ($_ -match '^([0-9a-fA-F]{64})\s+\*?(.+)$') {
+        $expectedHash = $Matches[1]
+        $releaseFile = $Matches[2].Trim()
+        $actualHash = (Get-FileHash -LiteralPath $releaseFile -Algorithm SHA256).Hash
+        if ($actualHash -ine $expectedHash) { throw "SHA256 mismatch: $releaseFile" }
+        Write-Output "OK: $releaseFile"
+    }
+}
+```
 
-要求 Android 8.0（API 26）及以上。一个可配置的飞机 IPv4 地址统一用于 MAVLink、可选图传和 OTA；客户端提供定高/定点、自动起降、双摇杆、状态诊断和 A/B 应用镜像上传。
+### 4.2 USB 完整刷写
 
-使用顺序为：连接 `open32drone` Wi-Fi，等待 MAVLink 与 ToF 就绪，选择辅助模式，完成解锁/起飞，飞行结束后执行降落并确认上锁。图传只有收到新鲜 MJPEG 帧后才替换默认背景；断流不会冻结旧画面。实体 SBUS 飞手产生明确动作后取得普通控制权，手机停止发送普通摇杆指令；紧急上锁入口仍保留。
+安装 Python 3 与 esptool：
 
-Minimal Android APK、固件和 ROS 2 包是一组匹配接口。安装或刷写前应核对 `SHA256SUMS`，不要混用不同提交的组件。Android 与 ROS 2 不能同时控制同一架飞机；QGC 仅用于地面参数维护。当前 APK 为 Debug 签名，适合开发和受控测试，不应作为正式签名的产品发行包。
+```bash
+python3 -m pip install --user esptool
+```
 
-#### 4. 调参建议
+用 USB 数据线连接 XIAO。在 macOS 上可用下面的命令找到串口：
 
-调参建议每次只改一类参数，并记录修改前后的日志。
+```bash
+ls /dev/cu.usb*
+```
 
-##### 4.1 调试输出怎么用
+Windows 使用设备管理器显示的 `COMx`，Linux 通常是 `/dev/ttyACM0`。如果串口没有出现，让 XIAO 进入 Bootloader：按住 `BOOT`，按一下 `RESET`，然后松开 `BOOT`。
 
-| 阶段 | 推荐命令 | 关注字段 | 判断标准 |
-|---|---|---|---|
-| 上电静止 | `imu`、`ps` | 加速度计、角速度和姿态 | 机体静止时输出稳定，手持倾斜方向与机体一致 |
-| 遥控检查 | `rc` | 通道、归一化输入、模式和 armed | 摇杆及三段开关映射正确 |
-| 手持平移/旋转 | `flow` | RawVel、Filtered body、Gyro apparent、Position | 平移方向正确；原地旋转时补偿后速度接近零 |
-| 电机映射 | `mfr/mfl/mrr/mrl` | 对应电机 | 四个命令与机体电机位置一致，必须拆桨 |
-| STAB 低空 | `log dump` | rates、ratesTarget、attitude、motor | 角速度和姿态跟随目标，电机没有持续饱和 |
-| ALT_HOLD | `alt`、`log dump` | Target、Alt(TOF)、velocity.z、altReject | 高度围绕进入模式时的目标收敛 |
-| POS_HOLD | `flow`、`log dump` | UsingFlow、PosGate、HoldGate、Locked、position.x/y | 门控和锁点建立后位置控制生效 |
+以下是首次安装的完整恢复流程。`erase-flash` 会清除 NVS 中的参数、校准和网络配置；保留已有设备配置时使用[附录 B 的 OTA 流程](#maintenance)。把示例端口替换为自己的端口，并确认终端位于 `releases/minimal/`：
 
-##### 4.2 基础姿态环
+```bash
+python3 -m esptool --chip esp32s3 \
+  --port /dev/cu.usbmodemXXXX erase-flash
 
-1. 保持 `STAB` 模式，先确认不会自旋、不会单方向持续倾倒。
-2. 若高频抖动，先降低 `CTL_R_RATE_D` / `CTL_P_RATE_D` 或检查电机、桨叶、机架震动。
-3. 若姿态响应慢，再小幅提高 `CTL_R_RATE_P` / `CTL_P_RATE_P`。
-4. 若姿态能回正但有慢性偏差，再考虑小幅增加 Rate I，不要先动积分。
+python3 -m esptool --chip esp32s3 \
+  --port /dev/cu.usbmodemXXXX --baud 921600 \
+  write-flash 0x0 Open32Drone-minimal-merged.bin
+```
 
-##### 4.3 定高
+Windows 在发布目录中使用 `py`，将 `COM5` 替换为设备管理器中的实际端口：
 
-当前定高采用“悬停推力前馈 + 高度 PID”，油门摇杆在辅助模式中解释为以 50% 为中位的垂直速度指令。首次调试应先在 `STAB` 估计悬停推力并写入 `ALT_HOVER`；进入 `ALT_HOLD` 后回中保持高度，上/下拨杆移动高度目标。地面解锁后电机保持怠速，油门超过起飞触发阈值并持续 0.20 s 才启动受限推力斜坡。
+```powershell
+py -m pip install --user esptool
+py -m esptool --chip esp32s3 --port COM5 erase-flash
+py -m esptool --chip esp32s3 --port COM5 --baud 921600 write-flash 0x0 Open32Drone-minimal-merged.bin
+```
 
-| 现象 | 优先调整 |
-|---|---|
-| 切入 `ALT_HOLD` 后推力不足 | 检查 `ALT_HOVER` 与运行时 `hoverEstimate`，不要用摇杆偏置代替前馈标定 |
-| 高度上下震荡 | 检查 ToF 反射面，并适当降低 `ALT_P` / `ALT_D` |
-| 高度响应迟钝 | 确认 `alt` 中定高已接入，再小幅调整 `ALT_P` 或 `ALT_VEL_MAX` |
-| 无法接入定高 | 查看 `alt` 的 `Reject` 和 ToF 高度 |
+Windows 可用 Arduino IDE 串口监视器查看输出，设置为 115200 波特率；刷写前关闭占用同一端口的监视器。出现传输错误时把波特率改为 `460800`，仍不稳定再改为 `115200`。写入完成后按一下 RESET，打开 115200 波特率串口：
 
-##### 4.4 光流方向与定点
+```bash
+screen /dev/cu.usbmodemXXXX 115200
+```
 
-当前控制用 XY 不是原始像素，而是经过高度换算、陀螺补偿、bias 扣除和门控后的相对位置估计。调光流时要区分三类量：
+开机时把飞机水平放在硬桌面上，不要触碰。串口会依次显示电机通道、Wi-Fi、IMU、光流/ToF 和陀螺仪初始化，最后出现：
 
-| 字段 | 含义 |
-|---|---|
-| `flow` 中的 `RawVel` | 光流模块原始轴向速度 |
-| `Filtered body` | 角速度补偿和滤波后的机体系速度 |
-| `Gyro apparent` | 机体旋转在光流中产生的表观速度 |
-| `Position X/Y` | 飞控积分的水平相对位置 |
-| `UsingFlow/PosGate/HoldGate/Locked` | 光流使用、位置估计和定点控制状态 |
+```text
+Gyro calibration complete
+Initializing complete
+```
 
-校准顺序：
+### 4.3 检查传感器
 
-1. 拆桨，手持前后和左右平移，每个方向执行一次 `flow`，确认速度符号。
-2. 原地俯仰和横滚后执行 `flow`，观察 `Filtered body` 是否接近零；需要时调整 `FLOW_GYRO_P/R` 和 `FLOW_GYRO_DLY`。
-3. 完成 STAB 与 ALT_HOLD 检查后，再低空切入 `POS_HOLD`。
-4. 使用 `flow` 查看 `UsingFlow`、`PosGate`、`HoldGate` 和 `Locked`，使用 `log dump` 分析连续过程。
-5. 定点横向发散时切回 `STAB`，先检查方向和旋转补偿，再调整 `POS_HOLD_P` 与 `POS_VEL_P_X/Y`。
+在串口中输入以下命令，每行回车：
 
-##### 4.5 RAM 日志
+```text
+sys
+imu
+flow
+pw
+```
 
-`log dump` 会输出 CSV 格式数据。当前日志列包括：
+`sys` 显示固件身份和 300 Hz 主循环状态；`imu` 显示传感器型号、采样和陀螺校准；`flow` 显示光流/ToF 的数据包与高度；`pw` 显示 ADC 和换算后的电池电压。
 
-| 类别 | 字段 |
-|---|---|
-| 时间 | `t` |
-| 角速度 | `rates.x/y/z`、`ratesTarget.x/y/z` |
-| 姿态 | `attitude.x/y/z`、`attitudeTarget.x/y/z` |
-| 控制用位置 | `position.x/y/z` |
-| 控制用速度 | `velocity.x/y/z` |
-| 光流链 | `flowRaw.x/y`、`flowComp.x/y`、`flowFilt.x/y`、`flowGyro.x/y` |
-| 位置控制 | `targetPosX/Y`、`targetVel.x/y`、`velError.x/y`、`posRollCmd`、`posPitchCmd` |
-| 门控与诊断 | `flowAgeMs`、`flowPosGate`、`posHoldGate`、`flowReject`、`posReject`、`altReject`、`actuatorOwner`、`autoPhase`、`posFallback` |
-| 控制输出 | `thrustTarget`、`motor.rl/rr/fr/fl`、`mixerScale`、`posSaturated`、`motorSaturated` |
+飞机放在地面时，ToF 可能处于约 20 mm 的近距离盲区。将飞机平稳抬到 20–60 cm 后，距离应随高度变化；在有纹理地面上缓慢水平移动，光流数据也应变化。
 
-RAM 日志以 25 Hz 保存最近约 12 秒的飞行数据，解除锁定后使用 `log dump` 导出；飞行中禁止批量导出。`perf` 使用每 16 个控制周期一次的阶段采样评估 IMU、输入、估计、控制、CLI、MAVLink 和维护路径的耗时。安全模块保留失联下降和一个持续姿态门限的最小翻覆停桨，不进行碰撞分类，也没有独立事故缓冲。
+### 4.4 校准这台飞机
 
-#### 5. 飞行前检查与分阶段验收
+#### 六面加速度计校准
 
-每次新装机、改动飞行关键代码或更换传感器后，按以下顺序推进：
+第一次装机、更换 IMU 或完整擦除后，运行 `ca`。按照串口提示依次放置：
+
+1. 水平；
+2. 机头向上；
+3. 机头向下；
+4. 右侧着地；
+5. 左侧着地；
+6. 倒置。
+
+每次摆好后松手，让飞机在刚性平面上静止采样。出现 `Accelerometer calibration accepted` 后，把飞机恢复水平，等待陀螺再次完成，再执行 `imu`。静止时加速度模长应接近 `9.81 m/s²`。
+
+#### 电池电压校准
+
+用万用表测量电池端电压，记为 `V_DMM`；运行 `pw` 读取飞控显示电压，记为 `V_FW`。先运行 `p PWR_VOLT_SCALE` 读取现值，再计算：
+
+```text
+新比例 = 旧比例 × V_DMM ÷ V_FW
+```
+
+写入后等待一秒，再用 `pw` 检查：
+
+```text
+p PWR_VOLT_SCALE 你的新数值
+```
+
+例如旧比例为 2.000，万用表为 4.10 V，飞控为 4.00 V，新比例就是 `2.000 × 4.10 ÷ 4.00 = 2.050`。
+
+#### SBUS 校准（遥控器路线）
+
+安装了接收机时，打开遥控器并运行 `cr`。完成串口给出的八个摇杆和开关动作，然后用 `rc` 查看结果：
+
+| 操作 | 正常读数 |
+| --- | --- |
+| 横滚、俯仰、偏航回中 | 接近 0 |
+| 油门最低 / 最高 | 接近 0 / 1 |
+| 三段模式开关 | 接近 0 / 0.5 / 1 |
+
+只用 Android 或 ROS 的飞机不需要执行 `cr`。
+
+### 4.5 拆桨完成四路电机测试
+
+飞机保持上锁，依次运行：
+
+```text
+mrl
+mrr
+mfr
+mfl
+```
+
+四条命令依次对应后左 M0、后右 M1、前右 M2、前左 M3；串口中只输入命令本身。每条命令只允许一个电机转动约 1 秒。把位置与从机顶观察到的 CW/CCW 写在电机标签上，然后按上一章的方法安装对应桨叶。
+
+### 4.6 选择起飞方式
+
+SBUS 和 Android 都能完成首飞。判断方法很简单：
+
+| 手上设备 | 使用路线 | 需要什么 |
+| --- | --- | --- |
+| 有 SBUS 接收机和已配对遥控器 | 路线 A：遥控器 | 执行 `cr`，熟悉急停摇杆动作 |
+| 没有接收机，或想快速体验 | 路线 B：Android APK | 一台 Android 手机，连接飞机 Wi-Fi |
+
+第一次飞行只打开一个控制端。使用手机时关闭 ROS 与其他 MAVLink 客户端；使用遥控器时先让手机 App 停止控制。
+
+#### 路线 A：SBUS 遥控器
+
+三段开关对应三个模式：
+
+| 开关位置 | 模式 | 操作感觉 |
+| --- | --- | --- |
+| 低 | STAB 姿态 | 油门直接控制推力，适合熟练飞手 |
+| 中 | ALT_HOLD 定高 | 油门回中保持高度 |
+| 高 | POS_HOLD 定点 | 光流保持水平位置，首飞推荐 |
+
+把模式放到高档定点。油门最低、偏航最右完成解锁；电机会以约 10% 怠速转动。将油门保持在 62.5% 以上约 0.2 秒，飞机进入辅助起飞并爬升到默认 0.60 m。起飞后让油门回到中位，轻量修正水平位置。
+
+降落时把油门保持在 5% 以下约 0.3 秒，飞机会自动下降并在接地后停桨。需要取消下降时将油门推到 60% 以上。
+
+急停动作是油门最低、偏航最左保持至少 150 ms。急停会立即停桨，飞机在空中会直接下落，因此只在即将碰人、缠绕或姿态失控时使用。
+
+#### 路线 B：Android APK
+
+把 `Open32Drone-Controller-0.1.apk` 复制到手机并安装。Android 可能要求为文件管理器临时允许“安装未知应用”。
+
+飞机完整擦除后的默认热点是：
+
+```text
+Wi-Fi: open32drone
+密码: 12345678
+飞机地址: 192.168.4.1
+MAVLink UDP: 14550
+```
+
+手机连接这个热点，系统提示“无互联网”时选择继续连接。打开 Open32Drone Controller，顶部应出现实时飞控状态。输入相对高度 `0.65`，长按“一键起飞”约 0.60 秒；固件会完成解锁、爬升并进入定点。
+
+左摇杆控制升降与偏航，右摇杆控制前后与左右。第一次只做 5–10 秒小范围悬停，然后长按“降落”。如果飞机向人、墙或家具快速移动，优先按“降落”；已经无法安全降落时长按“紧急上锁”。
+
+Android 不依赖实体遥控器。按钮变灰时先看顶部是否仍有 MAVLink 心跳，并确认手机仍连接 `open32drone`，没有切回蜂窝网络或其他 Wi-Fi。
+
+### 4.7 第一次飞行
+
+选择有纹理、光照均匀的地面，在飞机四周留出至少 2 m。将电池放在装机时确定的中央位置，镜头朝下且洁净。上电后等到陀螺校准完成，再走一遍：
+
+1. 低高度起飞到 0.60–0.65 m；
+2. 双手或摇杆回中，观察 5 秒；
+3. 小幅向前、向后、向左、向右移动；
+4. 回到原区域；
+5. 自动降落，确认接地停桨。
+
+起飞后马上向一侧翻通常是电机位置、转向、桨叶或 IMU 方向问题，应立即停桨并回到拆桨检查。能够平稳离地但有小幅抖动、漂移或高度变化，则进入下一章按现象调参。
+
+<a id="chapter-5"></a>
+
+## 5. 飞行调参
+
+调参从观察现象开始。先把机械、传感器和供电恢复到一致状态，再动控制参数；每次只改一个值，完成同样的短飞行后比较。用同样的动作和日志比较修改前后的变化。
+
+### 5.1 先判断是不是参数问题
+
+下面这些现象应先回到硬件：
+
+| 现象 | 先检查 |
+| --- | --- |
+| 起飞瞬间向一侧翻倒 | M0–M3 位置、转向、CW/CCW 桨、IMU 朝向 |
+| 某一侧始终无力 | 桨叶损伤、电机弯轴、接头、电机温度与电池压降 |
+| 高频细碎振动 | 桨叶变形、电机轴、橡胶圈、电机高度、IMU 固定 |
+| 定点只在某种地面失效 | 地面纹理、反光、光照、光流窗口 |
+| 高度值跳变 | ToF 窗口、模块倾斜、近距离盲区和线束 |
+| 换电以后重心变化 | 电池位置、附件位置和实际起飞重量 |
+
+机械状态稳定后，用同一块电池、同一处地面和同一高度做对比。首选的测试动作是“0.65 m 起飞 → 回中悬停 5 秒 → 降落”。
+
+### 5.2 认识四层控制
+
+Open32Drone 的控制器由内到外依次工作：
+
+```text
+角速度环 → 姿态角环 → 高度/速度环 → 水平位置环
+```
+
+内环必须先稳定，外环才能调好。P 决定纠正有多积极；I 用来消除持续偏差；D 抑制变化过快造成的过冲。调参时通常先看 P，再看 I，最后只在确有需要时调整 D。
+
+查看所有参数：
+
+```text
+p
+```
+
+查看或写入单个参数：
+
+```text
+p CTL_R_P
+p CTL_R_P 4.02
+```
+
+所有参数修改都在落地上锁、电机停止后进行；固件在允许写入时保存到 NVS。改之前记录旧值，改完等待一秒再读取确认。下表是配套源码的默认值，设备可能保留旧 NVS 参数，实际值以 `p 参数名` 回读为准。
+
+### 5.3 姿态抖动与回正
+
+标准姿态参数如下：
+
+| 功能 | Roll | Pitch | 默认值 |
+| --- | --- | --- | ---: |
+| 角度 P | `CTL_R_P` | `CTL_P_P` | 4.47 |
+| 角速度 P | `CTL_R_RATE_P` | `CTL_P_RATE_P` | 0.05 |
+| 角速度 I | `CTL_R_RATE_I` | `CTL_P_RATE_I` | 0.20 |
+| 角速度 D | `CTL_R_RATE_D` | `CTL_P_RATE_D` | 0.001 |
+
+#### 高频抖动
+
+如果飞机能起飞，但机身快速、连续地抖动，先修复桨和电机振动。机械正常后，将对应轴的角速度 P 降低 5–10%。例如 Roll 从 `0.050` 改为 `0.045`：
+
+```text
+p CTL_R_RATE_P 0.045
+```
+
+重新做同样的 5 秒悬停。抖动减轻且控制仍有力度，再在 Pitch 轴按同样幅度处理；不要一次同时改 P、I、D。
+
+#### 慢速来回摆动或回正过猛
+
+低频、大幅度摆动更可能来自外层角度 P。把 `CTL_R_P` 或 `CTL_P_P` 降低约 10%，例如 `4.47 → 4.02`。如果飞机显得反应迟钝、松杆后很久才回平，可向原值方向小幅增加。
+
+#### 持续偏向一侧
+
+固定方向的倾斜通常由重心、弱电机、机架变形或加速度计偏置造成。先移动电池让重心回到中央，再重新运行 `ca`。只有机械与校准一致、偏差仍可重复时，才分析 I 项。
+
+### 5.4 高度问题
+
+高度控制的主要参数是：
+
+| 参数 | 默认值 | 作用 |
+| --- | ---: | --- |
+| `ALT_P` | 0.747 | 高度误差的主要纠正力度 |
+| `ALT_I` | 0.10 | 消除长期高度偏差 |
+| `ALT_D` | 0.20 | 根据垂直速度抑制过冲 |
+| `ALT_HOVER` | 0.49 | 标称悬停推力前馈 |
+| `ALT_VEL_MAX` | 0.45 | 最大升降速度 |
+
+飞机围绕目标高度缓慢上下摆动时，先确认 ToF 数据连续，再把 `ALT_P` 降低约 10%，例如：
+
+```text
+p ALT_P 0.67
+```
+
+起飞后稳定，但高度长期慢慢偏低或偏高，可以小幅检查 `ALT_I`。接近目标时明显冲过头再反向，则重点观察 ToF 速度和 `ALT_D`。
+
+`ALT_HOVER` 表示标准电压附近维持高度所需的集体推力。81 g、60 mm 桨的参考值是 0.49。飞机在传感器正常、姿态平稳的情况下长期靠较大高度修正支撑，可从飞行日志估计悬停电机均值，再以很小幅度调整。不要用提高 `ALT_HOVER` 掩盖电池老化或弱电机。
+
+### 5.5 水平漂移与定点
+
+定点控制依赖光流，默认参数为：
+
+| 参数 | 默认值 | 作用 |
+| --- | ---: | --- |
+| `POS_HOLD_P` | 0.85 | 位置误差转换为目标速度 |
+| `POS_VEL_P_X/Y` | 0.35 | 水平速度 P |
+| `POS_VEL_I_X/Y` | 0.04 | 水平速度 I |
+| `POS_STICK_V` | 0.70 | 摇杆最大水平速度 |
+
+先在清晰纹理地面上运行 `flow`，确认数据新鲜。原地偏航时若位置出现圆周漂移，检查模块是否位于标准前移 24 mm 位置、安装平面是否水平。持续向固定方向漂移时重新检查光流零偏、电池重心和 IMU 校准。
+
+飞机慢慢离开目标而不积极回来，可以小幅增加 `POS_HOLD_P`；围绕目标左右来回摆，则小幅降低。一次改 5–10%，每次使用相同的定点高度和飞行时间。
+
+### 5.6 电池与动力变化
+
+参考电池满电约 4.2 V，放电过程中电机可用推力会下降。主板通过 `GPIO1/A0` 读取 100 kΩ / 100 kΩ 分压后的电压，辅助定高和定点使用有界前馈补偿。
+
+先用 `pw` 和万用表把 `PWR_VOLT_SCALE` 校准准确。新电池和低电量电池各做一次同样的 5 秒悬停，比较日志里的 `voltage`、`hoverFF`、`voltComp` 和四路电机输出。如果电压下降时四路同时接近饱和，优先检查电池内阻、桨叶和电机，而不是继续提高 PID。
+
+### 5.7 用日志比较两次飞行
+
+飞机上锁后运行：
+
+```text
+log dump
+```
+
+保存 CSV 后，可用仓库中的分析脚本快速检查：
+
+```bash
+python3 simulation/course/analyze_log.py \
+  --csv /path/to/flight.csv \
+  --output output/my-flight-analysis
+```
+
+至少比较以下曲线或字段：
+
+- 姿态目标与实际 Roll/Pitch；
+- ToF 高度与高度目标；
+- 光流速度与位置误差；
+- 四路电机输出及其是否饱和；
+- 电池电压和补偿量；
+- 问题发生前后的时间点。
+
+一次有效调参记录只需要四项：原参数、修改值、相同飞行动作、观察结果。变好就保留并继续小幅调整；变差就恢复旧值。这样很快能形成适合这台飞机的参数表。
+
+当飞机能重复完成定点起飞、5–10 秒悬停、小范围平移和自动降落，就可以把控制权交给 ROS。
+
+<a id="chapter-6"></a>
+
+## 6. ROS 2 控制
+
+飞机已经能稳定起降后，ROS 2 会把它变成一台可以编程的空中机器人。你可以订阅 IMU、距离、电池和里程计，也可以发送起飞、降落、速度和位置命令。下面从一次最简单的自动起降开始，再逐步组合成方形航线。
+
+### 6.1 准备 ROS 电脑
+
+推荐使用 Ubuntu 24.04 与 ROS 2 Jazzy。先按 [ROS 2 官方安装说明](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html)安装 Desktop 版本，再安装 MAVROS 和构建工具：
+
+```bash
+sudo apt update
+sudo apt install ros-jazzy-mavros ros-jazzy-mavros-extras \
+  python3-colcon-common-extensions python3-rosdep
+sudo ros2 run mavros install_geographiclib_datasets.sh
+```
+
+把仓库中的 ROS 包放进工作空间：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+mkdir -p ~/osdrone_ws/src
+cp -a /path/to/osrdrone/ros2 ~/osdrone_ws/src/open32drone_driver
+cd ~/osdrone_ws
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install
+source install/setup.bash
+```
+
+以后每次打开终端先执行：
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source ~/osdrone_ws/install/setup.bash
+```
+
+### 6.2 连接飞机
+
+最简单的方式是让 ROS 电脑直接连接飞机热点 `open32drone`。确认 Android 手机已经停止控制，电脑也没有运行其他占用该连接的客户端，然后测试：
+
+```bash
+ping -c 3 192.168.4.1
+```
+
+在第一个终端启动完整驱动：
+
+```bash
+ros2 launch open32drone_driver open32drone.launch.py
+```
+
+如果飞机已经通过 `sta` 命令接入路由器，使用 `wifi` 查到它的地址，再启动：
+
+```bash
+ros2 launch open32drone_driver open32drone.launch.py \
+  aircraft_ip:=192.168.1.42
+```
+
+第二个终端查看状态：
+
+```bash
+ros2 run open32drone_driver control status
+ros2 topic echo /open32drone/connected --once
+```
+
+`connected` 为 `true` 后，再看实时传感器：
+
+```bash
+ros2 topic hz /open32drone/imu/data
+ros2 topic echo /open32drone/range/downward --once
+ros2 topic echo /open32drone/battery --once
+ros2 topic echo /open32drone/odom --once
+```
+
+### 6.3 认识常用话题
+
+| 话题 | 类型 | 内容 |
+| --- | --- | --- |
+| `/open32drone/connected` | `std_msgs/Bool` | 飞控心跳连接 |
+| `/open32drone/imu/data` | `sensor_msgs/Imu` | 姿态、角速度和加速度 |
+| `/open32drone/range/downward` | `sensor_msgs/Range` | 向下 ToF 距离 |
+| `/open32drone/battery` | `sensor_msgs/BatteryState` | 实测电池电压 |
+| `/open32drone/odom` | `nav_msgs/Odometry` | 局部位置和速度 |
+| `/open32drone/cmd_vel` | `geometry_msgs/Twist` | 机体系速度目标 |
+| `/open32drone/goal_pose` | `geometry_msgs/PoseStamped` | 局部坐标中的位置目标 |
+
+`cmd_vel` 使用机体系：`x` 向前、`y` 向左、`z` 向上。`goal_pose` 使用固定的局部 `odom` 坐标，不随当前机头转动；以下方形示例假定起始机头与局部 +X 对齐，且中途不偏航。里程计来自机载相对估计，不是外部绝对定位真值。TF 树的主要关系是：
+
+```text
+open32drone/odom → open32drone/base_link → open32drone/tof_link
+```
+
+### 6.4 第一个 ROS 飞行
+
+首次接入先拆桨运行 `ros2 run open32drone_driver bench_test --duration 5`，确认连接、传感器和状态正常。完成后断电装桨，把飞机放到飞行区中央，上电并等待陀螺完成。运行下面的监督式测试：
+
+```bash
+ros2 run open32drone_driver flight_test --height 0.65 --hover 5
+```
+
+程序会依次等待实时连接、发送起飞、等待到达目标高度、悬停 5 秒、发送降落，并等待接地上锁。终端最后会打印高度、持续时间和水平移动范围。
+
+同样的动作也可以逐条运行：
+
+```bash
+ros2 run open32drone_driver control status
+ros2 run open32drone_driver control takeoff --height 0.65
+ros2 run open32drone_driver control land
+```
+
+需要立即停桨时：
+
+```bash
+ros2 run open32drone_driver control emergency-stop
+```
+
+急停不会执行下降过程，只用于已经无法安全降落的情况。
+
+### 6.5 速度控制：让飞机移动
+
+`control velocity` 的四个量分别是前进、向左、向上和偏航角速度。命令会自动准备 Offboard，持续发送指定时间，结束后再发送 0 速度。
+
+起飞后，以 0.15 m/s 向前飞 1.5 秒：
+
+```bash
+ros2 run open32drone_driver control velocity 0.15 0.00 0.00 \
+  --duration 1.5
+```
+
+向左：
+
+```bash
+ros2 run open32drone_driver control velocity 0.00 0.15 0.00 \
+  --duration 1.5
+```
+
+原地以 0.4 rad/s 左转：
+
+```bash
+ros2 run open32drone_driver control velocity 0.00 0.00 0.00 \
+  --yaw-rate 0.4 --duration 1.5
+```
+
+负数表示反方向。第一次练习将速度限制在 `±0.15 m/s`、时间限制在 1.5 秒以内，每条命令后观察飞机是否停住。
+
+#### 用速度画一个小方形
+
+飞机起飞并稳定后，依次运行：
+
+```bash
+# 前、左、后、右，每条边约 0.225 m
+ros2 run open32drone_driver control velocity  0.15  0.00 0.00 --duration 1.5
+ros2 run open32drone_driver control velocity  0.00  0.15 0.00 --duration 1.5
+ros2 run open32drone_driver control velocity -0.15  0.00 0.00 --duration 1.5
+ros2 run open32drone_driver control velocity  0.00 -0.15 0.00 --duration 1.5
+ros2 run open32drone_driver control land
+```
+
+这个练习展示的是“动作积分成路径”：速度大小决定移动快慢，持续时间决定边长。由于每条命令之间飞机会重新捕获位置，实际方形会有圆角和少量闭合误差。
+
+### 6.6 位置控制：直接指定航点
+
+`control position x y z` 使用 `open32drone/odom` 坐标中的绝对位置。起飞后先读取一次里程计，确认地面原点和当前高度。若起飞点附近为 `(0, 0, 0)`，可以发送：
+
+```bash
+ros2 run open32drone_driver control position 0.25 0.00 0.65
+```
+
+飞机会向前 25 cm，同时保持 65 cm 高度。下面四个航点组成边长 25 cm 的方形：
+
+```bash
+ros2 run open32drone_driver control position 0.25 0.00 0.65
+sleep 3
+ros2 run open32drone_driver control position 0.25 0.25 0.65
+sleep 3
+ros2 run open32drone_driver control position 0.00 0.25 0.65
+sleep 3
+ros2 run open32drone_driver control position 0.00 0.00 0.65
+sleep 3
+ros2 run open32drone_driver control land
+```
+
+如果本机里程计起点不是 0，就把四个点加到起飞时的 `x0`、`y0` 和地面 `z0` 上。一次新目标与当前位置的水平距离保持在 0.8 m 内。
+
+### 6.7 直接发布 ROS 消息
+
+自己的节点可以连续发布 `Twist`。先启动 Offboard：
+
+```bash
+ros2 run open32drone_driver control offboard start
+```
+
+然后以至少 10 Hz 发布速度。终端试验可用：
+
+```bash
+ros2 topic pub -r 20 /open32drone/cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.10, y: 0.0, z: 0.0}, angular: {z: 0.0}}"
+```
+
+按 `Ctrl+C` 停止速度发布后，若 ROS Offboard 节点仍运行且定位反馈有效，它在默认 0.50 秒命令超时后捕获当前位置并继续发送保持目标。若机载端连目标流也收不到，则由固件独立的 0.30 秒 Offboard 超时逻辑处置；两者不是同一个计时器。正式程序应在退出前主动发送零速度并调用降落。
+
+### 6.8 用 RViz 和 rosbag 看懂飞行
+
+启动时打开 RViz：
+
+```bash
+ros2 launch open32drone_driver open32drone.launch.py use_rviz:=true
+```
+
+记录一次 ROS 飞行：
+
+```bash
+ros2 bag record \
+  /open32drone/imu/data \
+  /open32drone/range/downward \
+  /open32drone/odom \
+  /open32drone/battery \
+  /open32drone/flight/status \
+  /open32drone/offboard/status
+```
+
+回放后可以比较目标动作、实际轨迹、高度和电压。到这里，你已经把“状态、目标、动作、反馈”连接成一个程序闭环；强化学习在这个闭环中增加一个能够从大量仿真经验中优化动作的策略。
+
+多机命名、接口说明与维护入口见[ROS 2 配套软件与自动飞行](docs/AUTOMATIC_FLIGHT_AND_ROS2.zh-CN.md)。
+
+<a id="chapter-7"></a>
+
+## 7. 仿真与强化学习
+
+ROS 章节已经把飞行拆成状态、目标和动作：里程计告诉程序飞机在哪里，速度或位置命令告诉飞机往哪里去，传感器反馈再修正下一次动作。强化学习沿用同一个闭环，只是让策略在大量仿真飞行中自己调整动作，学会处理风、动力差异和模型误差。
+
+本项目采用残差强化学习。几何 PD 控制器继续承担姿态稳定和四电机分配，PPO 网络输出三轴加速度修正。这个结构适合 81 g 微型飞机：基础控制器使动作具有明确物理意义，策略把学习能力集中到传统模型最难描述的部分。
+
+### 7.1 先把真实飞机变成机器人模型
+
+Open32Drone 的 URDF/USD 使用一个刚性机身和四个旋翼关节：
+
+```text
+base_link
+├── rotor_0_link  — continuous — 后左 M0
+├── rotor_1_link  — continuous — 后右 M1
+├── rotor_2_link  — continuous — 前右 M2
+├── rotor_3_link  — continuous — 前左 M3
+├── battery_link — fixed
+├── camera_link  — fixed
+├── imu_link     — fixed sensor frame
+└── flow_tof_link — fixed
+    ├── flow_link — fixed optical frame
+    └── tof_link  — fixed range frame
+```
+
+`base_link` 包含不会相对机身运动的主体：打印机架、主控 PCB、XIAO、橡胶圈、电机外壳、供电与固定结构。IMU 和光流/ToF 都有固定坐标系，方便 ROS 和仿真传感器引用；它们的实体质量已计入刚性机身。电池单独保留 `battery_link`，便于更换质量或位置；相机也是固定 link；四副桨叶各自是一个 `continuous` link。
+
+参考模型的质量分配为：
+
+| 部分 | 质量 |
+| --- | ---: |
+| 刚性机身 `base_link` | 54.2547 g |
+| 4 副桨叶 | 约 1.4542 g |
+| 18350 电池 | 25.0000 g |
+| 相机 | 约 0.2911 g |
+| 合计 | 81.0000 g |
+
+下面的视频把四段 Isaac Sim 检查合在一起：外观与 81 g 配置、主控 PCB 近景、无动力自由落体、四个旋翼关节运动。
+
+[![机器人模型与物理检查，点击打开视频](img/model-checks-poster.png)](img/videos/model-checks.mp4)
+
+[打开视频：机器人模型与物理检查](img/videos/model-checks.mp4)
+
+### 7.2 没有完整电机曲线，怎样先建立模型
+
+8520 电机只给出尺寸和最高 50,000 rpm，不能直接得到带 60 mm 桨时的推力。最高转速换算为角速度是：
+
+```text
+50,000 × 2π ÷ 60 = 5,235.99 rad/s
+```
+
+这个数适合设置关节速度上限，但不等于实际带桨转速或推力。最实用的第一步是利用真实悬停：
+
+```text
+单电机平均悬停推力
+= 总质量 × 重力加速度 ÷ 4
+= 0.081 kg × 9.80665 m/s² ÷ 4
+≈ 0.1986 N
+≈ 20.25 gf
+```
+
+再从含电压日志读取稳定悬停时的四路平均命令。参考日志约为 47.4%，因此粗模型把满命令推力外推为约 0.419 N/电机，并用 40 ms 作为电机响应初值。训练时同时随机改变推力增益、质量、惯量、电压和响应时间，让策略不要过度依赖某一个精确数值。
+
+这套方法足以跑通训练、评估和 Isaac 展示。以后做一个简单单电机推力台，在 4.2、3.9、3.7、3.5 V 下记录多个 PWM 点，就能逐步替换粗估值，而无需等待完整厂家模型。
+
+### 7.3 训练任务是什么
+
+悬停练习的观测有 35 维，包含位置/速度误差、姿态矩阵、角速度、参考速度与加速度、上一步动作、误差积分、电机估计力和电压。网络输出 3 维动作，分别是 x、y、z 方向的残差加速度，范围为 `±4 m/s²`。
+
+每个仿真环境都从略有不同的初始姿态、动力参数和风扰开始。策略在每一步得到奖励：
+
+- 接近目标位置与速度；
+- 保持姿态和飞行高度；
+- 动作平滑，不频繁大幅修正；
+- 不发生翻覆、撞地或飞出范围。
+
+PPO 会同时运行许多环境，收集“观测 → 动作 → 结果”，再更新策略。训练结束后用训练期间未见过的种子和更强扰动比较基础 PD 与 PPO 残差。
+
+### 7.4 在普通电脑上跑第一个 PPO
+
+从仓库根目录创建 Python 环境：
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install numpy torch matplotlib
+```
+
+运行 CPU 悬停练习：
+
+```bash
+python3 simulation/course/hover_lab.py \
+  --output output/my-first-hover \
+  --iterations 400 --envs 128 --device cpu
+```
+
+输出目录会包含：
+
+| 文件 | 内容 |
+| --- | --- |
+| `training.csv` | 每轮奖励、位置误差和失败数 |
+| `policy_initial.pt` / `policy_final.pt` | 初始与最终策略 |
+| `actor.pt` | 可独立加载的 TorchScript 策略 |
+| `evaluation.json` | PD 与 PPO 在留出工况中的结果 |
+| `config.json` | 训练使用的全部设置 |
+
+以下数值转录自配套 guide 的参考仿真运行，表示 96 个完整回合的平均 RMS 位置误差，供复现时比较；它们不是本教程更新时重新执行的结果，也不代表真机飞行精度：
+
+| 水平扰动 | 基础 PD | PPO 残差 |
+| ---: | ---: | ---: |
+| 0.0 m/s² | 1.58 cm | 3.64 cm |
+| 0.8 m/s² | 16.51 cm | 6.03 cm |
+| 1.5 m/s² | 30.48 cm | 10.56 cm |
+
+平静环境里，简单 PD 更准确；风扰增强后，PPO 学到的补偿明显降低了位置误差。残差策略的主要作用是处理持续扰动和模型误差，基础控制器仍负责稳定飞行。
+
+![基础 PD 与 PPO 在三种扰动下的位置误差](img/hover-evaluation.png)
+
+图 7-1　CPU 悬停练习的留出工况对比。
+
+![PPO 训练曲线](img/training-curves.png)
+
+图 7-2　训练过程中的奖励与误差变化。
+
+### 7.5 从悬停到技巧飞行
+
+完整演示把定点扩展成连续轨迹：先沿八字曲线穿过 10 个环，再螺旋爬升，最后在阵风中停驻。目标轨迹由程序给出，PPO 学习的是跟踪和扰动补偿。
+
+先看相同扰动下的固定镜头悬停。第一段是基础 PD，第二段是 PPO 残差：
+
+
+  
+    [![基础 PD 悬停，点击打开视频](img/hover-pd-poster.png)](img/videos/hover-pd.mp4)
+
+[打开视频：基础 PD 悬停](img/videos/hover-pd.mp4)
+    基础 PD：受到持续扰动后出现较大的稳态偏移。
+  
+  
+    [![PPO 残差悬停，点击打开视频](img/hover-ppo-poster.png)](img/videos/hover-ppo.mp4)
+
+[打开视频：PPO 残差悬停](img/videos/hover-ppo.mp4)
+    PPO 残差 + PD：策略主动补偿扰动并回到目标附近。
+  
+
+
+下面是 60 秒完整演示，包括模型、训练流程、悬停对照、八字穿环、螺旋和阵风恢复：
+
+[![强化学习完整演示（60 秒），点击打开视频](img/rl-demo-poster.png)](img/videos/rl-demo-60s.mp4)
+
+[打开视频：强化学习完整演示（60 秒）](img/videos/rl-demo-60s.mp4)
+
+Isaac Sim 中的 34 秒连续飞行通过了 10/10 个环，位置 RMS 误差约 12.11 cm，最高速度约 1.10 m/s。配套 guide 报告的独立仿真工况对比如下（与上面的 CPU 悬停练习为不同评估）：
+
+| 工况 | 基础 PD | PPO 残差 + PD |
+| --- | ---: | ---: |
+| 平静 | 2.72 cm | 8.19 cm |
+| 持续扰动 | 51.33 cm | 18.43 cm |
+| 电机差异与质量误差 | 53.81 cm | 14.28 cm |
+| 突变阵风 | 34.46 cm | 26.92 cm |
+
+### 7.6 复现完整训练与 Isaac Sim
+
+完整训练脚本使用 CUDA。先在训练工作站运行物理检查：
+
+```bash
+cd /path/to/osrdrone/simulation/rl_demo
+python3 physics_checks.py \
+  --output ../../output/rl-demo/my-run/physics-checks.json
+```
+
+然后训练、评估并做赛道预检：
+
+```bash
+python3 train.py \
+  --output ../../output/rl-demo/my-run \
+  --iterations 1200 --envs 1024
+
+python3 evaluate.py --run ../../output/rl-demo/my-run
+python3 preflight.py --run ../../output/rl-demo/my-run
+```
+
+训练和评估在 PyTorch 仿真环境中进行；下面用 Isaac Sim/PhysX 单独验证和展示。启动前需要已经准备好的 `OPEN32DRON_fixed_81g` 模型交付包，检查包内使用说明、质量参数及 USD 资源；只有源码而没有此包时，先按仓库 `docs/SIMULATION_MODEL.zh-CN.md` 准备模型。不能把空目录传给 `--package`。Isaac Sim 的独立 Python 环境用它自带的 `python.sh` 启动：
+
+```bash
+/path/to/isaac-sim/python.sh \
+  /path/to/osrdrone/simulation/rl_demo/native_isaac.py \
+  --package /path/to/osrdrone/output/simulation-model/OPEN32DRON_fixed_81g \
+  --run /path/to/osrdrone/output/rl-demo/my-run \
+  --output /path/to/osrdrone/output/rl-demo/my-run/native \
+  --seconds 34 --record --visible
+```
+
+`native_isaac.py` 每 5 ms 向刚体施加四电机合力与力矩，飞机的位置和姿态来自 PhysX 积分；轨迹、环和摄影机用于展示，不会逐帧拖动飞机。
+
+### 7.7 怎样继续走向真机策略
+
+接下来的工作可以沿三条线并行推进：
+
+1. 用单电机推力台替换满推力、响应时间和反扭矩初值；
+2. 把 IMU、光流和 ToF 的噪声、延迟、丢帧加入训练环境；
+3. 将 ROS 记录的状态整理成与策略 35 维观测一致的输入，先做回放推理，再做受限台架与低高度试验。
+
+示例策略使用仿真状态，圆环位置由任务直接给出。下一阶段可以用相机加入视觉定位或目标识别；策略先输出有界加速度或速度修正，通过 ROS 接入现有飞控闭环，待台架数据充分后再研究更底层的执行器控制。
+
+至此，Open32Drone 的整条开发链已经连通：PCB 与机架构成真实飞机，固件让它稳定起飞，ROS 提供程序接口，URDF/USD 把结构带入仿真，PPO 再为控制器增加对扰动和模型误差的适应能力。
+
+<a id="development"></a>
+
+## 附录 A：源码构建与架构
+
+### A.1 什么时候需要源码构建
+
+只体验标准样机时，使用第 4 章的匹配发布包。需要改传感器、引脚、控制逻辑或通信接口时，再从源码构建。固件、Android 和 ROS 2 必须来自相互匹配的版本；每次修改后记录源码版本、编译选项和参数快照。
+
+### A.2 固定开发环境
+
+| 项目 | 配套版本或选项 |
+| --- | --- |
+| Arduino IDE | 2.x；也可使用 Arduino CLI |
+| Arduino-ESP32 | 3.3.6 |
+| FlixPeriph | 1.10.4，含 IMU/SBUS 外设支持 |
+| MAVLink Arduino 库 | 2.0.25 |
+| 板卡 | `esp32:esp32:XIAO_ESP32S3` |
+| PSRAM | OPI |
+| 分区 / Flash | `default_8MB` / DIO |
+| 标准 IMU | MPU6500/MPU9250；其他后端需分别验证 |
+
+Arduino IDE 中添加 ESP32 开发板索引，安装指定版本，选择 XIAO ESP32-S3 和实际串口。以本表为配置依据，下面的旧版界面截图只用于辨认菜单位置。
+
+```text
+https://espressif.github.io/arduino-esp32/package_esp32_index.json
+```
+
+![Arduino IDE 开发板索引设置位置](img/software1.PNG)
+
+![开发板管理器位置，安装版本以本节配置表为准](img/software2.PNG)
+
+![XIAO ESP32-S3 与端口选择](img/software3.PNG)
+
+Arduino CLI 可在源码根目录执行：
+
+```bash
+arduino-cli core install esp32:esp32@3.3.6 \
+  --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+arduino-cli lib install "FlixPeriph@1.10.4" "MAVLink@2.0.25"
+arduino-cli compile --clean \
+  --fqbn 'esp32:esp32:XIAO_ESP32S3:PSRAM=opi,PartitionScheme=default_8MB,FlashMode=dio' \
+  --output-dir /tmp/open32drone-build firmware
+```
+
+Arduino IDE 打开 `firmware/firmware.ino`，同目录 `.ino` 页签属于同一个草图。上传前拆桨，关闭占用串口的其他程序。源码编译成功后仍需完成传感器、电机映射和受控飞行检查。新板的完整分区安装使用第 4 章的 merged 镜像流程；普通草图应用文件不能直接替代该镜像。
+
+<a id="firmware-architecture"></a>
+
+### A.3 飞控代码架构
+
+飞行关键链按固定顺序执行：输入采集、状态估计、控制目标选择、级联控制、混控与电机输出。主循环目标为 300 Hz；光流/ToF 状态和相关控制只在新有效测量到达时更新。网络、图传和维护操作不能直接替代电机控制链。
 
 ```mermaid
 flowchart LR
-  BUILD["编译与静态检查"] --> BENCH["拆桨检查"]
-  BENCH --> RESTRAINED["低功率约束测试"]
-  RESTRAINED --> FLIGHT["受控低空飞行"]
-  FLIGHT --> EVIDENCE["参数 · 日志 · 版本记录"]
+    INPUT[IMU / SBUS / 光流与 ToF] --> EST[姿态与相对运动估计]
+    EST --> TARGET[控制权与目标选择]
+    TARGET --> CTRL[定高 / 定点 / 姿态 / 角速度]
+    CTRL --> MOTOR[混控与四路 PWM]
+    EST --> LOG[日志与诊断]
+    CTRL --> LOG
+    NET[Android / ROS 2] --> TARGET
 ```
 
-| 阶段 | 必做项目 | 进入下一阶段的条件 |
-|---|---|---|
-|软件|固定 ESP32 Core/分区配置编译；检查测试和凭据|构建成功，版本与参数来源明确|
-|拆桨|`sys`、`imu`、`rc`、`flow`；校准；四路单电机；RC/Offboard 超时|传感器方向、电机顺序、拒绝逻辑和停桨路径正确|
-|低功率约束|检查预转、起飞斜坡、定高接入、定点门控、自动降落和持续翻覆门限|输出连续且有界，人工接管有效，无异常饱和|
-|受控飞行|依次验证 STAB、ALT_HOLD、POS_HOLD，再验证自动起降和外部控制|姿态稳定，高度/位置修正方向正确，失效时按预期退化|
+| 职责 | 源码入口 | 阅读重点 |
+| --- | --- | --- |
+| 启动与调度 | `firmware.ino`、`time.ino` | 初始化顺序、控制周期和限频服务 |
+| 传感器与遥控 | `imu_backend.h`、`imu.ino`、`rc.ino`、`flow.ino` | 轴向、校准、包序号、时间戳与新鲜度 |
+| 状态估计 | `estimate.ino` | 姿态、ToF 高度/垂直速度、光流旋转与安装偏移补偿 |
+| 模式与外部控制 | `control.ino`、`control_modes.ino`、`control_offboard.ino` | 共享状态、控制权、目标流预热与接入 |
+| 自动起降 | `control_auto_flight.ino` | 预检、爬升、接管、下降和接地 |
+| 级联控制 | `control_altitude.ino`、`control_position.ino`、`control_stabilization.ino` | 从外环目标到姿态、角速度和混控 |
+| 电机与电源 | `motors.ino`、`power.ino` | 电机编号、PWM、电压采样与补偿 |
+| 失效处理 | `safety.ino` | 预检、失联处置和持续翻覆停桨 |
+| 通信与升级 | `mavlink.ino`、`wifi.ino`、`camera.ino`、`ota.ino` | AP/STA、受门控指令、可选图传、A/B OTA |
+| 诊断与参数 | `cli.ino`、`log.ino`、`parameters.ino` | CLI、RAM 日志、性能采样和 NVS |
 
-飞行前确认机架方向、电机/桨叶安装、飞控固定、地面纹理与照明、ToF 反射条件和场地隔离。开机后保持静止，直到 `imu` 显示陀螺仪校准完成；用 `rc` 检查摇杆和三段开关，用 `flow` 分别确认 ToF 与水平光流状态。首次带桨只做短时低空 STAB，确认人工恢复后再进入定高和定点。每轮只改变一个因素，并记录固件版本、硬件、参数、环境和 RAM 日志。
+这些文件按职责划分，不是每个文件一个线程。高度来自向下 ToF；当前 Minimal 没有气压计控制路径。自动起降由固件实现，Android 和 ROS 只请求动作。更多调用关系见[固件架构说明](docs/FIRMWARE_ARCHITECTURE.zh-CN.md)。
 
-#### 6. 故障排查表
+### A.4 接线速查
 
-| 现象 | 可能原因 | 解决方法 |
-|---|---|---|
-|起飞即翻|桨叶方向错误|检查 X 布局：对角线同向，相邻反向|
-|STAB 稳但 XY 漂移|未进入 POS_HOLD 或光流门控未打开|串口 `flow` 查看 `UsingFlow/PosGate/HoldGate/Locked` 和拒绝码|
-|定点越修越跑|光流 X/Y 方向或角速度补偿错误|手持平移和原地旋转后执行 `flow`，检查 RawVel 与 Filtered body|
-|高度波动大|ToF 数据抖动、反射面不合适或定高增益偏大|运行 `alt` 并结合日志检查 `flowHeight`、`position.z` 和 `velocity.z`|
-|悬停震荡|位置/速度环增益过大|降低 `POS_HOLD_P` 或 `POS_VEL_P_X/Y`|
-|电机输出明显偏一侧|混控方向、电机顺序或姿态估计方向错误|拆桨依次执行四个单电机测试命令，并在日志中确认修正方向|
-|姿态环抖动|机架震动或角速度环 D 项过大|检查机架与桨叶，并结合 `log dump` 分析 rates 和 motor 输出|
-|解锁失败|RC 信号异常或油门未归零|检查 SBUS 接线，串口 `rc` 查看通道值|
-|WiFi 连不上|SSID/密码设置错误或供电不稳|连接默认 AP `open32drone`；修改凭据时使用 `ap <ssid> <password>` 并重启|
-|MAVROS 连不上|电脑未连接飞控 AP，或 IP/UDP 端口错误|确认飞控地址为 192.168.4.1、端口为 14550，并用 `wifi` 查看状态|
+引脚表与第 3 章的电机编号一致；更换载板时先核对原理图和电压，再改软件映射。
 
-## 三、其他补充内容
+| 接口 | GPIO | 连接 |
+| --- | --- | --- |
+| IMU SDA / SCL | 2 / 43 | I²C 数据 / 时钟 |
+| 光流 RX / TX | 8 / 7 | 分别接模块 TX / RX，115200 波特率 |
+| SBUS RX / TX | 44 / 9 | 按接收机与底板接口定义连接 |
+| 电池 ADC | 1 / A0 | 100 kΩ / 100 kΩ 分压采样 |
+| M0 / M1 / M2 / M3 | 4 / 3 / 6 / 5 | 后左 / 后右 / 前右 / 前左 |
 
-### 参考链接汇总
+电机转向按拆桨实测确认，并与当前混控要求一致；对角同向、相邻反向。不要将旧接线表中的转向文字直接当成当前安装结果。
 
-- Flix 原项目：[github.com/okalachev/flix](https://github.com/okalachev/flix)
+<a id="maintenance"></a>
 
-- MAVLink 协议文档：[mavlink.io](https://mavlink.io)
+## 附录 B：A/B OTA 与维护
 
-- QGroundControl：[qgroundcontrol.com](https://qgroundcontrol.com)
+### B.1 区分完整刷写与无线更新
 
-- ESP32-S3 技术手册：[espressif.com](https://www.espressif.com)
+新设备或需要重建分区时，从 USB 地址 `0x0` 写入 `Open32Drone-minimal-merged.bin`。已采用匹配 A/B 分区的设备，无线升级选择 `Open32Drone-minimal-app.bin`。完整擦除会移除校准、参数和 Wi-Fi 设置，之后必须重新校准。
 
-- PX4 开发指南（PID 调优）：[docs.px4.io](https://docs.px4.io)
+### B.2 执行应用更新
 
-- Crazyflie 技术文档（参考 Lee 控制器）：[bitcraze.io](https://www.bitcraze.io)
+1. 落地、上锁、拆桨，停止自动飞行、Offboard 和图传。
+2. 核对固件、APK 和 ROS 包的版本；用 `SHA256SUMS` 校验应用镜像。
+3. 在本地串口执行 `ota`，读取 A/B 状态和本机上传令牌。
+4. 在配套 Android 或 ROS 上传器中选择飞机地址和 app 镜像，按提示填写令牌。
+5. 上传器携带长度与 SHA-256，固件写入非活动应用槽。
+6. 重启后用 `sys`、`imu`、`flow`、`ota` 检查启动与传感器状态，再进行拆桨验收。
+
+新槽需要通过启动健康检查才会被确认；确认失败时由回滚机制恢复旧槽。不要向无线上传器提交 merged 镜像。更详细的维护接口见配套 ROS/自动飞行文档和源码仓库 `releases/minimal/README.zh-CN.md`。
+
+### B.3 网络与客户端
+
+使用 `wifi` 查看 AP/STA、飞机 IP 和连接状态。默认恢复热点是 `open32drone`；设备保存过自定义配置时，以实际串口输出为准。`ap <ssid> <password>` 或 `sta <ssid> <password>` 用于设置网络，重启后检查结果。
+
+同一时间只使用一个常规控制客户端。物理 SBUS 动作可取得控制权，Android 与 ROS 不能同时发送控制流。QGroundControl 仅用于上锁状态的标准参数查看和修改，不作为本教程的起降或航线客户端。可选 MJPEG 图传不参与定点估计；ROS 包也不提供它的 `camera_info`。
+
+<a id="diagnostics"></a>
+
+## 附录 C：诊断速查与实验记录
+
+### C.1 常用串口命令
+
+| 命令 | 用途 |
+| --- | --- |
+| `help` | 查看当前固件实际支持的命令 |
+| `sys`、`time`、`perf` | 固件身份、循环周期、分阶段执行耗时 |
+| `imu`、`ps`、`psq` | IMU 校准、欧拉角、四元数 |
+| `flow`、`alt` | 光流/ToF、估计和定高状态、接入或拒绝原因 |
+| `pw` | 电池 ADC 和校准后电压 |
+| `rc`、`cr` | 遥控状态、遥控校准 |
+| `ca` | 六面加速度计校准 |
+| `mrl`、`mrr`、`mfr`、`mfl` | 拆桨单电机测试，依次为 M0、M1、M2、M3 |
+| `mot` | 四路电机输出 |
+| `p`、`p <name>`、`p <name> <value>` | 参数列表、回读、落地上锁后修改 |
+| `log dump` | 飞后、上锁、电机停止时导出 RAM CSV |
+| `wifi`、`ota` | 网络与 A/B 升级状态 |
+
+RAM 日志只保留有限的最近历史（配套实现约 25 Hz、12 秒），飞后及时导出。它不是持续写入的黑匣子，也没有独立碰撞事故缓冲。性能分析应比较周期分布、超时与各阶段耗时，不能只看平均频率。
+
+### C.2 按症状定位
+
+| 症状 | 检查顺序 |
+| --- | --- |
+| 没有 USB 串口 | 数据线 → BOOT/RESET → 实际端口 → 是否被其他程序占用 |
+| 开机校准不结束 | 保持静止 → IMU 供电与连接 → 安装刚性 → `imu` |
+| 起飞即翻或偏航失控 | 停桨 → 电机位置/转向 → 桨叶 → 主板与 IMU 轴向 |
+| 定点越修越远 | 光流平移符号 → 旋转补偿 → ToF 尺度 → 接入状态；不先加大增益 |
+| 高度跳变 | ToF 窗口与地面 → 安装角度 → 线束与新鲜度 → `alt` 和日志 |
+| 换电后下沉或电机饱和 | 电压校准 → 电池压降 → 重心 → 电机/桨叶 |
+| App 状态灰或 ROS 不连接 | 实际 Wi-Fi → 飞机 IP → UDP 14550 → 竞争客户端 → 心跳 |
+| ROS 速度停止后仍有异常运动 | 检查 Offboard 节点、定位反馈和日志，区分输入超时与机载断流 |
+| PPO 或 Isaac 无法运行 | Python 依赖 → CPU/CUDA 路线 → 模型包 → 策略输出 → 命令路径 |
+
+### C.3 保存一条可复现记录
+
+每轮至少保存：硬件配置与质量、固件/客户端版本、参数旧值和新值、电池状态、地面与照明、相同测试动作、CSV/rosbag 和观察结果。仿真另存训练配置、随机种子、策略文件和评估结果。
+
+改变传感器、机架、电机或关键控制代码后，重新经过“构建检查 → 拆桨验证 → 受控低空飞行 → 日志复核”。首飞采用第 4 章对应的已校准 SBUS 或 Android 路线；ROS 和策略实验建立在可重复的基础飞行之上。

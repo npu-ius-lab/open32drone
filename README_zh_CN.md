@@ -84,87 +84,12 @@
 
 ---
 
-## 硬件概览
-
-为了平衡复现难度与系统可维护性，硬件设计采用 **底座+模块** 的模块化架构。
-
-| 实物展示 | 核心组件 | 核心参数 | 关键特性 / 资源 |
-| :---: | :--- | :--- | :--- |
-| <img src="img/pcb1.png" width="100"> <br/> <img src="img/pcb2.png" width="100"> | **电路底板** | 嘉立创 EDA | 仅作母板，板载 4 路 MOS 驱动。提供完整 **[PCB 工程文件](https://oshwhub.com/fanchewang/open32drone)**,只需焊接 4 个 MOS 管和几个接插件，即可完成底板制作。 |
-| <img src="img/esp32.png" width="100"> | **主控模块** | SeeedStudio XIAO ESP32S3 Sense | 双核 240 MHz、PSRAM；执行 300 Hz 飞控，图传作为可选后台服务运行。 |
-| <img src="img/frame.png" width="100"> | **机架结构** | 75/85mm | 推荐市售成品带圈机架，仓库亦提供 **STL 3D 打印模型**。 |
-| <img src="img/motor.png" width="100"> | **动力电机** | 8520 有刷空心杯电机 (8.5mmx20mm) | 轴径 **1.0mm**，比 720 电机具有更大的载荷余量。 |
-| <img src="img/paddle.png" width="100"> | **螺旋桨** | 76mm | 高升力效率，是实现光流精准定点悬停的核心。 |
-
----
-
-## 固件结构
-
-固件以固定 300 Hz 的主循环组织飞行关键链路。每个节拍依次完成传感器采集、状态估计、控制目标选择、定高/定点与姿态稳定、电机输出；CLI、MAVLink 和 OTA 验证分别限频至 100、150 和 50 Hz。可选图传由低优先级后台任务承载，不参与控制调度。
-
-![Open32Drone 固件架构](img/firmware-architecture-zh.svg)
-
-| 层次 | 主要文件 | 职责 |
-| --- | --- | --- |
-| 入口与调度 | `firmware.ino`、`time.ino` | 初始化、单调时间、主循环顺序和任务优先级 |
-| 传感器输入 | `imu_backend.h`、`imu.ino`、`rc.ino`、`flow.ino` | 编译期 IMU 后端、SBUS 和 TF-0850 光流/ToF 数据包 |
-| 状态估计 | `estimate.ino` | 姿态、ToF 高度/垂直速度、光流水平速度和相对位置 |
-| 飞行控制 | `control.ino`、`control_*.ino` | 共享控制状态，以及模式/控制权、Offboard、自动起降、定高、定点和姿态稳定各专用模块 |
-| 安全与电源 | `safety.ino`、`power.ino` | 解锁预检、失联下降、持续翻覆停桨、电压测量和有界悬停推力前馈 |
-| 执行输出 | `motors.ino` | Quad-X 电机映射与 10 kHz、10 bit PWM |
-| 通信与配套 | `mavlink.ino`、`wifi.ino`、`camera.ino`、`ota.ino` | MAVLink、AP/STA 网络、可选 MJPEG 和仅地面 A/B OTA |
-| 诊断与记录 | `cli.ino`、`log.ino` | 本地串口诊断、25 Hz RAM 飞行日志和循环性能采样 |
-| 配置与基础库 | `parameters.ino`、`*.h` | 参数校验/NVS，以及 PID、滤波、四元数和向量工具 |
-
-完整初始化顺序、主循环和文件职责见[教程中的飞控代码架构](tutorial_zh_CN.md#2-飞控代码架构)。
-
----
-
-## 引脚定义
-
-| 外设 | GPIO | 说明 |
-|---|---:|---|
-| I2C SDA | 2 | 编译期选择的 IMU |
-| I2C SCL | 43 | 编译期选择的 IMU，400 kHz |
-| 光流 RX | 8 | ESP32 `Serial1` RX，接光流 TX |
-| 光流 TX | 7 | ESP32 `Serial1` TX，接光流 RX |
-| SBUS RX | 44 | ESP32 `Serial2` RX |
-| SBUS TX | 9 | ESP32 `Serial2` TX |
-| LED | 21 | 板载 NEOPIXEL |
-| 电池电压 | 1 / A0 | `VBAT_SW × 0.5` 分压输入 |
-| MOTOR 0 | 4 | 左后 |
-| MOTOR 1 | 3 | 右后 |
-| MOTOR 2 | 6 | 右前 |
-| MOTOR 3 | 5 | 左前 |
-
----
-
-## 快速开始
-
-1. 安装 Arduino IDE 2.x。
-2. 安装 ESP32 Arduino Core 3.3.6。
-3. 打开 `firmware/firmware.ino`。
-4. 选择 `XIAO_ESP32S3`，启用 OPI PSRAM，并使用 `default_8MB` A/B 应用分区和 DIO Flash。
-5. 确认 `FlixPeriph 1.10.4`、`MAVLink 2.0.25` 和 SBUS 依赖可被 Arduino IDE 识别；标准构建使用 MPU6500/MPU9250 后端，ICM20948 和 MPU6050 仅作为单独编译配置。
-6. 编译并烧录。
-7. 打开 115200 bps 串口监视器，输入 `help` 查看命令。
-8. 首次使用连接 Wi-Fi `open32drone`（密码 `12345678`）；MAVLink UDP 端口为 `14550`。需要路由器组网时再显式配置 STA，连接失败 8 s 后固件会开启恢复 AP。可选视频流地址为 `http://<飞机地址>/stream`。
-
-完整的全栈教程参见：
-
-[Open32Drone：从 0 到稳飞](./tutorial_zh_CN.md)
-
----
-
 ## 文档
 
 | 文档内容 | English | 简体中文 |
 | --- | --- | --- |
 | 项目总览 | [README](README.md) | [项目说明](README_zh_CN.md) |
 | 制作、使用与开发 | [Full Tutorial](tutorial.md) | [完整教程](tutorial_zh_CN.md) |
-| 固件架构 | [Firmware Architecture](docs/FIRMWARE_ARCHITECTURE.md) | [固件架构](docs/FIRMWARE_ARCHITECTURE.zh-CN.md) |
-| ROS 2 与自动飞行 | [ROS 2 & Automatic Flight](docs/AUTOMATIC_FLIGHT_AND_ROS2.md) | [ROS 2 配套软件与自动飞行](docs/AUTOMATIC_FLIGHT_AND_ROS2.zh-CN.md) |
-
 
 ---
 

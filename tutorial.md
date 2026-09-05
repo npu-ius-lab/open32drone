@@ -1,755 +1,1259 @@
-# Open32Drone: From Zero to Stable Flight
+# Open32Drone: Hardware, Flight, ROS 2, and Reinforcement Learning
 
-<p align="center">
-    <img src="img\drone.PNG" alt="Full drone view" />
-</p>
+[简体中文](tutorial_zh_CN.md) · [English](tutorial.md) · [Project overview](README.md)
 
-<p align="center">
-  <strong>
-    <a href="./tutorial_zh_CN.md">简体中文</a> &nbsp;|&nbsp;
-    <a href="./tutorial.md">English</a>
-  </strong>
-</p>
+![Open32Drone reference aircraft](img/drone-complete.jpg)
 
-## 1. Project Overview
+This tutorial follows the complete build: manufacture the hardware, flash and fly it, tune the controller, add ROS control, and explore simulation and learning. It describes the matching Open32Drone Minimal system. Use the release bundle for your first flight; read the development appendices when you need to modify the firmware.
 
-**Open32Drone Minimal** is an open-source ESP32-S3 micro-UAV platform for research, education, embedded flight-control development, and low-altitude robotics experiments.
+Paths such as `hardware/`, `firmware/`, `ros2/`, `simulation/`, and `releases/minimal/` are relative to the complete source repository. Obtain that repository before running commands; the tutorial alone does not contain the code or binaries. Replace `/path/to/osrdrone` with your checkout path. Run `bash` blocks in a Linux/macOS terminal and `powershell` blocks in Windows PowerShell. Enter device commands from `text` blocks one line at a time in a 115200-baud serial terminal.
 
-The platform integrates inertial sensing, optical flow/ToF, SBUS, four brushed-motor drivers, Wi-Fi/MAVLink, and ROS 2 interfaces in a lightweight embedded architecture. A single ESP32-S3 executes attitude stabilization, assisted takeoff and landing, low-altitude altitude/position hold, and external position or velocity control. The carrier board, sensor timing, relative-state estimator, progressive control stack, and companion applications form one matched system implementation.
+## Contents
 
-## 2. Project Tutorial
+- [1. Project overview](#chapter-1)
+- [2. Goals and learning route](#chapter-2)
+- [3. Hardware soldering and assembly](#chapter-3)
+- [4. Firmware, calibration, and first flight](#chapter-4)
+- [5. Flight tuning](#chapter-5)
+- [6. ROS 2 control](#chapter-6)
+- [7. Simulation and reinforcement learning](#chapter-7)
+- [Appendix A: Source builds and architecture](#development)
+- [Appendix B: A/B OTA and maintenance](#maintenance)
+- [Appendix C: Diagnostics and experiment records](#diagnostics)
 
-### Phase 1: Hardware and Assembly
+<a id="chapter-1"></a>
 
-#### Materials
+## 1. Project overview
 
-##### Main Controller Module
+### A micro-aircraft you manufacture yourself
 
-<p align="center">
-    <img src="img\seed-s3.PNG" />
-</p>
+Open32Drone is an open-source quadrotor project built from individual parts. Print the frame, order the carrier PCB using the production files, solder the components and connectors, then install the controller, sensors, motors, battery, and propellers. Getting airborne is the first stage. You can then modify the firmware, connect ROS 2, and progress to simulation and reinforcement-learning experiments using the Gazebo/Isaac resources.
 
-Model: Seeed Studio XIAO ESP32-S3 Sense
+The electronics are modular. The purple Open32Drone PCB distributes power, drives four brushed motors, and connects the modules. XIAO ESP32-S3, the IMU, and the optical-flow/ToF sensor are separate parts that you install. Printing, ordering, soldering, inspection, and assembly are therefore central parts of the project.
 
-Reference price: 90 RMB
+The reference aircraft uses 8520 coreless motors and a 1S battery for indoor flight. ESP32-S3 runs the flight controller at 300 Hz. The IMU measures attitude-related motion; a downward optical-flow/ToF module provides the measurements used for horizontal position and ground-relative height control.
 
-Module documentation: https://wiki.seeedstudio.com/cn/xiao_esp32s3_getting_started/
+The original flight-control core came from Oleg Kalachev's Flix. Open32Drone adds the carrier-board pin mapping, four brushed-motor outputs, optical-flow/ToF altitude and position hold, battery-voltage compensation, automatic takeoff and landing, persistent parameters, and Android/ROS 2 interfaces. The repository includes mechanical files, firmware, the mobile client, ROS drivers, simulation models, and learning examples.
 
-##### Frame and Propellers
+### System components
 
-<p align="center">
-    <img src="img\paddle1.PNG" />
-</p>
+| Layer | Main components | Purpose |
+| --- | --- | --- |
+| Structure and propulsion | Printed frame, four 8520 motors, four 60/65 mm propellers, rubber motor grommets | Support the parts and generate lift and attitude torque |
+| Controller and sensors | Open32Drone PCB, XIAO ESP32-S3, IMU, optical-flow/ToF module | Motor drive, state estimation, and control |
+| Power and communication | 1S battery, optional SBUS receiver, Wi-Fi | Supply power and receive pilot or program commands |
+| Companion tools and simulation | Android APK, ROS 2, URDF/USD, Gazebo, Isaac Sim, PPO examples | Manual flight, programming, model checks, and learning control |
 
-<p align="center">
-    <img src="img\paddle2.PNG" />
-</p>
+The carrier PCB connects these layers. XIAO supplies computation and Wi-Fi; the IMU is a separate module soldered in a defined orientation; optical flow and ToF share a downward module connected by a cable. MOSFETs on the carrier drive the motors directly. A camera is optional for streaming and future vision experiments. Position hold and the existing learning examples do not require it.
 
-Model: 12.3 cm wheelbase frame, 76 mm propellers for 1 mm motor shafts
+### The feedback loop
 
-Required: 1 frame, 4 propellers
-
-Reference price: 19 RMB per set
-
-##### Coreless Motors
-
-<p align="center">
-    <img src="img\electric.PNG" />
-</p>
-
-Model: 8520 coreless motor, 1 mm shaft diameter
-
-Required: 4
-
-Reference price: 24 RMB for 4 pieces
-
-##### IMU Module
-
-<p align="center">
-    <img src="img\imu.PNG" />
-</p>
-
-Model: GY-91 module with MPU9250 and BMP280. The current flight configuration disables the BMP280; attitude uses the MPU9250 and altitude hold uses the optical-flow module's ToF sensor.
-
-Required: 1
-
-Reference price: 14 RMB
-
-##### Boost Converter Module
-
-<p align="center">
-    <img src="img\up_voltage.PNG" />
-</p>
-
-Model: 3.3 V to 5 V boost converter
-
-Required: 1
-
-Reference price: 4.5 RMB
-
-##### ToF Optical-Flow Module
-
-<p align="center">
-    <img src="img\tof.png" />
-</p>
-
-Model: CORVON link protocol
-
-Required: 1
-
-Reference price: 68 RMB
-
-##### Motor Driver Chip
-
-<p align="center">
-    <img src="img\mos.png" />
-</p>
-
-Model: AO3400 MOSFET
-
-Required: 4
-
-Reference price: 0.4 RMB for 4 pieces
-
-##### Remote Controller
-
-<p align="center">
-    <img src="img\controller.png" />
-</p>
-
-Model: Flysky i6S single controller
-
-Required: 1
-
-Reference price: 249 RMB
-
-##### Receiver
-
-<p align="center">
-    <img src="img\receiver.png" />
-</p>
-
-Model: Flysky A8S receiver, SBUS receiver
-
-Required: 1
-
-Reference price: 65 RMB
-
-##### Other Materials
-
-Motor sockets, battery, pin headers, female headers, and related small parts.
-
-#### 2. Baseboard Fabrication
-
-<p align="center">
-    <img src="img\pcb1.png" />
-</p>
-
-<p align="center">
-    <img src="img\pcb2.png" />
-</p>
-
-Model: Custom board
-
-Required: 1
-
-PCB link: https://oshwhub.com/fanchewang/open32drone
-
-##### 2.1 Open the Design
-
-<p align="center">
-    <img src="img\design1.png" />
-</p>
-
-##### 2.2 Order the PCB
-
-<p align="center">
-    <img src="img\design2.png" />
-</p>
-
-<p align="center">
-    <img src="img\design3.png" />
-</p>
-
-<p align="center">
-    <img src="img\design4.png" />
-</p>
-
-Keep the other options at their default values.
-
-<p align="center">
-    <img src="img\design5.png" />
-</p>
-
-<p align="center">
-    <img src="img\design6.png" />
-</p>
-
-#### 3. Drone Assembly
-
-##### 3.1 Materials Check
-
-Resistors: 0805 package, 10K or 20K are both acceptable.
-
-<p align="center">
-    <img src="img\all_stuff.png" />
-</p>
-
-##### 3.2 Tool Preparation
-
-Soldering iron and solder wire.
-
-##### 3.3 Soldering Process
-
-###### Core Soldering Rule: SMD Parts First, Through-Hole Parts Later
-
-If the female headers are soldered first, their tall plastic bodies will block the soldering iron tip and make SMD soldering extremely difficult. **Always solder the SMD components on the baseboard first, such as MOSFETs and resistors, and solder the female headers and pin headers last.**
-
-###### Step 1: Solder the Power Stage (MOSFETs and Resistors)
-
-**Soldering tip**: solder the resistors first, then solder the MOSFETs.
-
-1. Add a small amount of solder to one PCB pad first.
-
-2. Hold the component with tweezers, align it, and heat the pad to fix it in place.
-
-3. Finally solder the remaining pins and make sure the joints are smooth and rounded.
-
-**Warning**: MOSFETs have polarity and orientation. Check the PCB silkscreen direction carefully. If a MOSFET is reversed, the motor may spin at full speed immediately after power-on, which can easily cause a crash.
-
-<p align="center">
-    <img src="img\hanjie1.png" />
-</p>
-
-###### Step 2: Solder Module Connectors (Female Headers and Pin Headers)
-
-Once the SMD parts are secure, solder the connectors used for plug-in modules.
-
-- **ESP32-S3 interface**: solder two rows of 2.54 mm female headers. Keep the height level, otherwise the main controller board will tilt after insertion.
-
-- **Sensor interfaces**: include the GY91 module interface, optical-flow ToF combo module interface, and 5 V regulator module interface.
-
-- **Soldering point**: female headers have many pins. It is recommended to solder two diagonal pins first for positioning, confirm that the connector is vertical, and then solder the remaining pins.
-
-<p align="center">
-    <img src="img\hanjie2.png" />
-</p>
-
-###### Step 3: Solder Interface Components (Battery and Motors)
-
-Finally, complete the input and output connections.
-
-- **Motor sockets (4 pieces)**: solder them at the four corners. Sockets make it easy to quickly replace coreless motors when they wear out.
-
-- **Battery lead**: check the **battery polarity (VCC/GND)** carefully and make sure the wire can handle the instantaneous high current when the 8520 motors run at full speed.
-
-###### Post-Soldering Checklist
-
-Before plugging in the ESP32-S3, perform the following tests:
-
-1. **Short-circuit test**: use the continuity mode of a multimeter to check whether the positive and negative power rails, such as 5 V and GND, are shorted.
-
-2. **Continuity test**: check whether the MOSFET output side, namely the motor port, is connected to the corresponding control pin.
-
-3. **Visual inspection**: check for solder bridges, especially around MOSFETs and the dense female-header pins.
-
-### Phase 3: Software and Development
-
-#### 1. Embedded Development Environment Setup
-
-##### 1.1 Arduino IDE Installation
-
-Arduino IDE is one of the most commonly used integrated development environments for embedded development. It supports Windows, macOS, and Linux. This experiment recommends **Arduino IDE 2.x**. Compared with version 1.x, version 2.x uses a modern editor core and supports auto-completion, intelligent hints, an improved library manager, and a real-time serial monitor, which significantly improves development efficiency.
-
-The current firmware is built with `arduino-esp32 3.3.6`; use the same version to keep the tutorial and build environment aligned.
-
-- **Step 1.** Download and install a stable version of Arduino IDE for your operating system.
-
-https://www.arduino.cc/en/software/
-
-- **Step 2.** Launch Arduino IDE.
-
-- **Step 3.** Add the ESP32 board package to Arduino IDE.
-
-Go to **File > Preferences**, and paste the following URL into **"Additional Boards Manager URLs"**:
+At each flight-control update, IMU, ToF, and optical-flow measurements support estimates of attitude, velocity, and position. The controller combines these estimates with pilot or ROS targets to calculate four motor outputs.
 
 ```text
-https://raw.githubusercontent.com/espressif/arduino-esp32/gh-pages/package_esp32_index.json
+Measurements → State estimation → Attitude/height/position control → Motor mixing → Motion
+     ↑                                                                             │
+     └────────────────────── New measurements on the next update ──────────────────┘
 ```
 
-<p align="center">
-    <img src="img\software1.png" />
-</p>
+The residual PPO example currently runs in simulation and has not been integrated into the real flight firmware. It follows the same feedback structure: a base geometric controller handles attitude and lift allocation, while the network learns three-axis acceleration corrections for wind, propulsion variation, and model error. This makes it possible to compare both the benefits and the costs of learning across disturbance conditions.
 
-Go to **Tools > Board > Boards Manager...**, enter **esp32** in the search box, and install **esp32 3.3.6**, matching the project validation environment.
+### Reference aircraft
 
-<p align="center">
-    <img src="img\software2.png" />
-</p>
+The tutorial uses this configuration throughout:
 
-- **Step 4.** Select your board and port.
+- Frame outline approximately 103.3 × 103.3 mm.
+- Four 8520 motors: 8 × 20 mm, with 1 mm shafts.
+- Four 60 mm propellers: two CW and two CCW.
+- 18350 1S 1300 mAh battery, measured mass 25 g.
+- Approximately 81 g takeoff mass including the battery, with the horizontal center of mass near the body center.
+- XIAO ESP32-S3, MPU6500/MPU9250 IMU, and an optical-flow/ToF module.
+- Physical SBUS, Android, and ROS 2 control interfaces.
 
-At the top of Arduino IDE, you can directly select the port. It will likely be COM3 or higher. **COM1** and **COM2** are usually reserved for hardware serial ports. In the board selector on the left, search for **xiao** and select **XIAO_ESP32S3**.
+The guide reports manual altitude hold, optical-flow position hold, automatic takeoff/landing, and ROS velocity/position control with this platform, plus a residual-PPO demonstration in Isaac Sim. These interfaces also support sensor replacement, camera algorithms, improved thrust models, and future simulation-to-hardware work.
 
-<p align="center">
-    <img src="img\software3.png" />
-</p>
+### Repository map
 
-After completing the preparation above, you can start writing, compiling, and uploading programs for XIAO ESP32-S3.
+| Directory | Contents |
+| --- | --- |
+| `hardware/` | Frame 3MF/STEP, mechanical specifications, and parts information |
+| `firmware/` | ESP32-S3 flight-control source |
+| `android/` | Mobile controller source |
+| `ros2/` | ROS 2 driver, control commands, and RViz configuration |
+| `simulation/` | Teaching exercises, dynamics, Gazebo/Isaac, and learning code |
+| `releases/minimal/` | Matching full firmware, OTA application, APK, and ROS package |
+| `docs/` | Setup, parameters, troubleshooting, and project guides |
 
-##### 1.2 BootLoader Mode
+The next chapter defines the build route and the outcome of each stage.
 
-Sometimes, an incorrect program can make the XIAO lose its port or stop working normally. Common problems include:
+<a id="chapter-2"></a>
 
-- XIAO is connected to the computer, but no port number can be found.
+## 2. Goals and learning route
 
-- XIAO is connected and a port number appears, but program upload fails.
+The project develops a complete aircraft workflow that you can manufacture, maintain, extend, and reproduce. You will learn how digital designs become hardware, how feedback stabilizes flight, how to locate a fault, and how to move a control idea from your computer into simulation and real-aircraft interfaces.
 
-When either problem occurs, try putting XIAO into BootLoader mode. This solves most device-recognition and upload-failure problems. The method is:
+### What you will complete
 
-- **Step 1.** Press and hold the `BOOT` button on XIAO ESP32-S3.
+#### Build a real flying aircraft
 
-- **Step 2.** Keep holding `BOOT`, connect the board to the computer through a data cable, and release `BOOT` after connection.
+Print the frame and order bare PCBs from matching production files. Use the BOM and placement drawings to solder components, connectors, the power module, and the IMU. Install optical flow/ToF, XIAO, motors, and the battery. Establish a consistent nose direction, motor numbering, and propeller orientation, and record each assembly step.
 
-- **Step 3.** Upload **File > Examples > 01.Basics > Blink** to check whether XIAO ESP32-S3 works correctly.
+#### Understand and install the firmware
 
-##### 1.3 Reset
+Distinguish the first full USB flash from subsequent application updates. Calibrate the IMU, receiver where fitted, and battery measurement. Check all four outputs with the propellers removed. Then choose physical SBUS sticks and a three-position mode switch, or an Android phone connected directly to the aircraft hotspot for automatic takeoff and landing.
 
-When the program behaves abnormally, press `Reset` once while powered on to restart the uploaded program.
+#### Tune from observable symptoms
 
-Holding `BOOT` during power-on and then pressing `Reset` once can also enter BootLoader mode.
+Separate rapid vibration, slow oscillation, vertical bouncing, horizontal drift, and battery-related sinking. Check the mechanical system, sensors, and control parameters in that order, changing one variable at a time.
 
-##### 1.4 Run Your First Blink Program
+#### Program motion with ROS
 
-By now, you should have a basic understanding of XIAO ESP32-S3 features and hardware. Next, use the simplest Blink example to make your XIAO ESP32-S3 blink for the first time.
+Read IMU, range, battery, and odometry data. Request takeoff/landing and send body-frame velocity or local position targets. Combine forward, sideways, and turning actions into a square route, then save an experiment with rosbag.
 
-- **Step 1.** Launch Arduino IDE.
+#### Build a simulation and learning workflow
 
-- **Step 2.** Go to **File > Examples > 01.Basics > Blink** and open the example.
+Understand how URDF/USD links, joints, mass, and collision geometry represent the aircraft. Run a CPU hover exercise with the approximate 81 g dynamics model, train a full PPO residual policy, and inspect figure-eight ring flight, spiral climbing, hovering, and gust recovery in Isaac Sim.
 
-<p align="center">
-    <img src="img\software4.png" />
-</p>
+### Recommended route
 
-- **Step 3.** Select **XIAO ESP32-S3** as the board model, choose the correct port, and upload the program.
+```mermaid
+flowchart TD
+    A[Print frame] --> B[Order bare PCB]
+    B --> C[Solder PCB]
+    C --> D[Assemble aircraft]
+    D --> E[USB flash and calibrate]
+    E --> F{First-flight interface}
+    F -->|SBUS available| G[RC position-hold first flight]
+    F -->|No receiver| H[Android position-hold first flight]
+    G --> I[Tune by symptoms]
+    H --> I
+    I --> J[ROS takeoff and velocity]
+    J --> K[ROS position and routes]
+    K --> L[URDF / USD and dynamics]
+    L --> M[PPO training and Isaac demonstration]
+```
 
-<p align="center">
-    <img src="img\software5.png" />
-</p>
+First-time builders should complete the manufacturing and assembly stages. Developers with a working aircraft can start at ROS. Learning experiments do not require mastery of every flight-control equation, but familiarity with coordinates, position, velocity, and feedback helps; complete the ROS square route first.
 
-After the program is uploaded successfully, you will see the following output, and the orange LED on the right side of XIAO ESP32-S3 will blink.
+### Prerequisites
 
-<p align="center">
-    <img src="img\software6.png" />
-</p>
+Hardware work requires basic soldering, multimeter, and lithium-battery handling experience. Software work requires navigating directories and running terminal commands. The ROS and learning chapters provide commands step by step; Python, vectors, and PID knowledge help explain their behavior.
 
-##### 1.5 Dependency Library Installation
+Use an evenly lit indoor surface with visible texture and at least 2 m of clearance around the aircraft. Keep propellers off during soldering, flashing, calibration, and motor tests. Fit them only after confirming motor positions and rotation directions.
 
-<p align="center">
-    <img src="img\software7.png" />
-</p>
+<a id="chapter-3"></a>
 
-The standard build uses Arduino-ESP32 `3.3.6`, `FlixPeriph 1.10.4`, `MAVLink 2.0.25`, and SBUS. Select `XIAO_ESP32S3`, enable OPI PSRAM, and use the `default_8MB` A/B application partition with DIO Flash. The default IMU backend supports MPU6500/MPU9250; ICM20948 and MPU6050 are separate compile configurations that require their own validation. Minimal has no barometer-control path.
+## 3. Hardware soldering and assembly
 
-#### 2. Flight-Control Firmware Architecture
+This chapter turns manufacturing files into a soldered, assembled, and direction-marked aircraft. The sequence is frame printing, PCB ordering, soldering and inspection, then assembly of the separate XIAO, IMU, and optical-flow/ToF modules.
 
-This section gives the shortest development path. See [Firmware Architecture](docs/FIRMWARE_ARCHITECTURE.md) for the complete module map, ownership model, background-service boundary, and source reading order.
+### 3.1 Print the frame and order the PCB
 
-##### 2.1 Runtime Structure
+#### Print the frame
 
-The firmware does not assign one flight task to every subsystem. Flight-critical work remains in the fixed 300 Hz high-priority `loopTask`: sensor acquisition, state estimation, target selection, control, and motor output execute in a fixed dependency order. CLI, MAVLink, and OTA boot validation are rate-limited inside that loop; the optional camera and MJPEG HTTP service run in a low-priority core-0 background task and never own control.
+Use `hardware/3d-model/open32drone-frame.3mf` as the printing project. Import at 100% scale and check that the main outline is approximately 103.3 × 103.3 mm. Check layer height, wall thickness, supports, and first-layer adhesion for your printer, nozzle, and material. Remove supports after printing. Confirm that all motor seats are undeformed and that PCB mounting holes align without force.
+
+Use `hardware/3d-model/open32drone-frame.stp` for structural changes or CAD inspection. Verify the approximately 103.3 mm outline after STEP import rather than relying on default unit conversion.
+
+#### Order the carrier PCB
+
+Prepare the Gerber/drill production package, electronic BOM, front/back placement drawings, and interface/voltage definitions from the same hardware revision. Follow those files when selecting board thickness, copper weight, finish, solder-mask color, and manufacturing options; do not infer them from photographs.
+
+Inspect the outline, slots, holes, mask, pads, and silkscreen on arrival. Match the physical revision to the BOM and placement drawing. Photos show real structures and work stages but do not replace manufacturing files.
+
+![Front and back of the carrier PCB](img/pcb-bare-front-back.jpg)
+
+Figure 3-1. The PCB provides power, motor drive, and module connections. XIAO, IMU, and optical flow/ToF are fitted separately.
+
+### 3.2 Prepare parts and tools
+
+| Part | Specification | Quantity |
+| --- | --- | ---: |
+| Open32Drone carrier PCB | Matching production files, BOM, and placement drawing | 1 |
+| XIAO ESP32-S3 | Computation and Wi-Fi | 1 |
+| IMU module | MPU6500/MPU9250, attached to the carrier | 1 |
+| Optical-flow/ToF module | Downward-facing, with matching cable | 1 |
+| Printed frame | Main outline about 103.3 × 103.3 mm | 1 set |
+| 8520 motors | 8 × 20 mm, 1 mm shaft, MX1.25 | 4 |
+| Rubber motor grommets | Ø8 mm bore, 2 mm groove | 4 |
+| Propellers | All 60 mm or all 65 mm; two CW and two CCW | 4 |
+| PWA self-tapping screws | 1.4 × 4 × 4 mm | 12 |
+| Battery | 1S; reference: 18350 1300 mAh, 25 g | 1 |
+| SBUS receiver | Needed only for the physical-RC route | 0 or 1 |
+| Camera | Optional streaming or vision extension | 0 or 1 |
+
+Prepare a temperature-controlled iron or heating equipment suitable for the solder paste, fine tweezers, flux, solder wick, magnifier, multimeter, screwdriver, scale, and nonconductive mat. Follow solder and component datasheets for temperature and reflow profiles. A temperature visible in a photo is not a process specification.
+
+### 3.3 Solder the carrier PCB
+
+#### Step 1: Sort by BOM
+
+Separate resistors/capacitors, diodes, MOSFETs, connectors, headers, and modules. Place one group at a time and mark completed groups on the drawing. Identify pin 1, cathodes, and connector openings before fitting polarized parts.
+
+![PCB, connectors, and modules laid out](img/parts-layout.jpg)
+
+Figure 3-2. PCB, connectors, power module, and IMU before soldering.
+
+#### Step 2: Fit low-profile SMD components first
+
+Clean the pads and apply solder paste or pre-tin evenly. Fit resistors, capacitors, and small-signal parts first, then MOSFETs and diodes, motor connectors and switches, and finally headers, sockets, the power module, and IMU.
+
+Check centering from above and pad contact from the side before heating. Remove bridges with flux and wick rather than repeatedly pushing neighboring components with the iron.
+
+![SMD component placement](img/smd-placement.jpg)
+
+Figure 3-3. Use the board's nose arrow as the orientation reference throughout assembly.
+
+#### Step 3: Reflow or solder individual joints
+
+Keep the board flat on a hot plate and follow the solder's preheat, reflow, and cooling requirements. Watch for component alignment as the solder melts, then let the board cool before moving it. With an iron, tack one pin, recheck orientation, and complete the remaining joints.
+
+![Connectors and SMD components after soldering](img/connectors-soldered.jpg)
+
+Figure 3-4. Connector openings should match the cable exit directions.
+
+#### Step 4: Inspect the joints
+
+Inspect the power input, four motor drivers, headers, and connectors under magnification. Joints should wet pads and pins fully, without shorts, lifted pins, poor contact, or loose solder balls.
+
+![Soldered carrier board](img/pcb-soldered.jpg)
+
+Figure 3-5. Inspect the four motor outputs and central component area carefully.
+
+With power disconnected, check for a short between battery terminals and verify continuity around the switch. Use a current-limited supply or protected 1S battery for initial power-up. Disconnect immediately if there is unexpected heating, odor, or rapidly rising current.
+
+#### Step 5: Fit the power module, sockets, and IMU
+
+Install the rear power module after matching input, output, and ground to the silkscreen. Solder the two XIAO socket rows parallel so that the module inserts without force.
+
+![Rear power module](img/power-board.jpg)
+
+Figure 3-6. Rear power-module placement.
+
+![Headers and board connections](img/headers.jpg)
+
+Figure 3-7. Check socket height and alignment from the side.
+
+The IMU is a separate module within the controller-board assembly. Match its axis markings and mount it rigidly; thick soft foam should not allow it to rock. The standard installation rotation is `roll=π`, `pitch=0`, `yaw=π/2`, matching the carrier and illustrated orientation.
+
+![IMU pin and orientation markings](img/imu-module.jpg)
+
+![IMU installed on the carrier](img/imu-installed.jpg)
+
+Figure 3-8. IMU module and completed installation.
+
+The board now contains motor drivers, power circuitry, XIAO sockets, and the IMU. Install the cable-connected optical-flow/ToF module with the frame next.
+
+### 3.4 Assemble the frame and sensors
+
+#### Establish orientation and motor numbering
+
+Viewed from above with the nose forward:
+
+```text
+                         Nose / +X
+                             ↑
+             M3 front left             M2 front right
+
+       +Y (left) ←        Body center        → -Y (right)
+
+             M0 rear left              M1 rear right
+                             ↓
+                         Tail / -X
+```
+
+| Position | Motor | GPIO | Propeller-off test | Simulation link |
+| --- | --- | ---: | --- | --- |
+| Rear left | M0 | 4 | `mrl` | `rotor_0_link` |
+| Rear right | M1 | 3 | `mrr` | `rotor_1_link` |
+| Front right | M2 | 6 | `mfr` | `rotor_2_link` |
+| Front left | M3 | 5 | `mfl` | `rotor_3_link` |
+
+#### Install optical flow/ToF
+
+Turn the frame upside down and fit the module in its front seat. Both optical and ranging windows face the ground and must remain clear of screws, tape, and cables. Keep the module parallel to the four-motor thrust plane. The standard mount is approximately 24 mm ahead of the yaw center; firmware compensates this offset.
+
+![Optical-flow/ToF installation](img/flow-tof-install.jpg)
+
+Figure 3-9. The sensor sits near the front, with its cable routed toward the center.
+
+#### Attach the controller board
+
+Return the frame upright, arrange the sensor cable, and align the board's nose arrow with the frame. Start all four screws before gently tightening diagonally. Keep the board flat and avoid trapping wires beneath it.
+
+![Controller board attached to the frame](img/mainboard-install.jpg)
+
+Figure 3-10. Relative placement of the PCB, IMU, and optical-flow/ToF module.
+
+Optical flow/ToF uses UART at 115200 baud: module TX connects to controller RX on GPIO8; module RX connects to controller TX on GPIO7. IMU I²C uses GPIO2 for SDA and GPIO43 for SCL. Follow the silkscreen with the matching harness and hold connector bodies when unplugging.
+
+#### Install XIAO and an optional receiver
+
+Check header pins, then insert XIAO vertically into its sockets. Leave USB-C accessible from outside the frame. Fit an SBUS receiver and its signal/power connections only if using physical RC; Android/ROS operation does not require a receiver.
+
+![XIAO inserted into the carrier](img/xiao-install.jpg)
+
+Figure 3-11. XIAO installation.
+
+#### Fit grommets and motors
+
+Seat each Ø8 mm rubber grommet fully in its frame groove. Press the 8520 motor into the grommet from the intended direction. Keep all motors at the same height with parallel shafts. Hold the motor casing; do not press the 1 mm shaft or pull the wires.
+
+![Motor grommets fitted to the frame](img/motor-grommets.jpg)
+
+![Motor and grommet side view](img/motor-install.jpg)
+
+Figure 3-12. Grommets secure motors and provide some vibration isolation.
+
+Route each motor cable along the arm to its M0–M3 connector. Leave slight slack and keep all wires outside propeller discs. Do not fit propellers yet.
+
+![Motor wiring connected to the board](img/motor-wiring.jpg)
+
+Figure 3-13. Completed motor wiring.
+
+#### Center and secure the battery
+
+The reference 18350 1300 mAh battery weighs 25 g. Secure it centrally so both horizontal center-of-mass axes remain near the geometric center. Keep its cable clear of propellers and sensor windows. Weigh the complete aircraft including battery, propellers, and fitted accessories; the reference value is approximately 81 g.
+
+![Centrally mounted cylindrical battery](img/battery-install.jpg)
+
+Figure 3-14. Keep the same battery position after each replacement.
+
+Rebalance after adding a camera/bracket or changing battery type. Follow the camera module's lens-orientation and ribbon-cable bend requirements.
+
+### 3.5 Verify motors and fit propellers after Chapter 4 calibration
+
+Keep the aircraft propeller-free while completing [Chapter 4 flashing, calibration, and motor tests](#chapter-4), then return here. With firmware installed, enter:
+
+```text
+mrl
+mrr
+mfr
+mfl
+```
+
+Each command spins one motor briefly at low output for about one second. Observe direction from above using a small paper strip or slow-motion video. M0 and M2 should share one direction, with M1 and M3 opposite. Label each motor with its number and measured CW/CCW direction.
+
+Match CW propellers to measured CW motors and CCW propellers to CCW motors. All four propellers must have the same diameter. Seat the hubs without rubbing the motor casings.
+
+![Propeller installation reference](img/prop-install.jpg)
+
+Figure 3-15. Use the measured motor labels for final propeller placement.
+
+Before flight, check board orientation, rigid sensors, parallel motor shafts, centered battery, and wires outside the propeller discs. Chapter 4 starts without propellers; return here only after calibration and output tests.
+
+![Completed reference aircraft](img/drone-complete.jpg)
+
+Figure 3-16. Camera optional; normal position hold uses IMU and downward optical flow/ToF.
+
+<a id="chapter-4"></a>
+
+## 4. Firmware, calibration, and first flight
+
+Keep all four propellers removed. Install the complete firmware on XIAO, calibrate sensors and battery measurement, then choose SBUS or Android for the first position-hold takeoff.
+
+### 4.1 Understand the release bundle
+
+| File in `releases/minimal/` | Purpose |
+| --- | --- |
+| `Open32Drone-minimal-merged.bin` | First USB installation, including bootloader, partition table, and application |
+| `Open32Drone-minimal-app.bin` | A/B OTA after the matching partition layout is installed |
+| `Open32Drone-Controller-0.1.apk` | Matching Android controller |
+
+Use the merged image at address `0x0` for a new XIAO, an erased device, or the first installation of this partition layout. The app image cannot replace a complete first installation.
+
+Enter the release directory and verify the downloaded files:
+
+```bash
+cd /path/to/osrdrone/releases/minimal
+shasum -a 256 -c SHA256SUMS       # macOS
+# sha256sum -c SHA256SUMS         # Linux
+```
+
+On Windows, run this PowerShell block in the release directory to compare every file with `SHA256SUMS`:
+
+```powershell
+Get-Content .\SHA256SUMS | ForEach-Object {
+    if ($_ -match '^([0-9a-fA-F]{64})\s+\*?(.+)$') {
+        $expectedHash = $Matches[1]
+        $releaseFile = $Matches[2].Trim()
+        $actualHash = (Get-FileHash -LiteralPath $releaseFile -Algorithm SHA256).Hash
+        if ($actualHash -ine $expectedHash) { throw "SHA256 mismatch: $releaseFile" }
+        Write-Output "OK: $releaseFile"
+    }
+}
+```
+
+### 4.2 Full USB installation
+
+Install Python 3 and esptool:
+
+```bash
+python3 -m pip install --user esptool
+```
+
+Connect a USB data cable. On macOS, find the serial port with:
+
+```bash
+ls /dev/cu.usb*
+```
+
+Windows shows `COMx` in Device Manager; Linux commonly uses `/dev/ttyACM0`. If no port appears, hold `BOOT`, press `RESET`, then release `BOOT` to enter the bootloader.
+
+The following first-installation recovery procedure uses `erase-flash`, which clears NVS parameters, calibration, and network settings. For an already configured device, use the [OTA procedure](#maintenance) to retain its setup. Replace the sample port and run from `releases/minimal/`:
+
+```bash
+python3 -m esptool --chip esp32s3 \
+  --port /dev/cu.usbmodemXXXX erase-flash
+
+python3 -m esptool --chip esp32s3 \
+  --port /dev/cu.usbmodemXXXX --baud 921600 \
+  write-flash 0x0 Open32Drone-minimal-merged.bin
+```
+
+On Windows, replace `COM5` with the actual port and use `py`:
+
+```powershell
+py -m pip install --user esptool
+py -m esptool --chip esp32s3 --port COM5 erase-flash
+py -m esptool --chip esp32s3 --port COM5 --baud 921600 write-flash 0x0 Open32Drone-minimal-merged.bin
+```
+
+Use the Arduino IDE serial monitor at 115200 baud on Windows. Close other applications using the port before flashing. If transfer errors occur, reduce the flashing baud rate to `460800`, then `115200` if necessary. After writing, press RESET. On macOS, a serial terminal can be opened with:
+
+```bash
+screen /dev/cu.usbmodemXXXX 115200
+```
+
+Keep the aircraft level and untouched on a rigid table during startup. Serial output initializes motor channels, Wi-Fi, IMU, optical flow/ToF, and the gyro, then reports:
+
+```text
+Gyro calibration complete
+Initializing complete
+```
+
+### 4.3 Check sensors
+
+Enter each command separately:
+
+```text
+sys
+imu
+flow
+pw
+```
+
+`sys` reports firmware identity and the 300 Hz loop; `imu` shows the sensor, sampling, and gyro calibration; `flow` shows optical-flow/ToF packets and height; `pw` shows the ADC and converted battery voltage.
+
+At floor level, ToF may be in its approximately 20 mm near-range blind zone. Raise the aircraft steadily to 20–60 cm: range should change with height. Slow horizontal motion over a textured surface should change optical-flow measurements.
+
+### 4.4 Calibrate this aircraft
+
+#### Six-face accelerometer calibration
+
+Run `ca` after initial assembly, IMU replacement, or a complete erase. Follow the serial prompts through level, nose up, nose down, right side down, left side down, and inverted orientations. Release the aircraft and let it sample motionlessly on a rigid surface at each step.
+
+After `Accelerometer calibration accepted`, return it to level, wait for gyro calibration, and run `imu`. Stationary acceleration magnitude should be close to `9.81 m/s²`.
+
+#### Battery-voltage calibration
+
+Measure the battery terminals with a multimeter (`V_DMM`) and read the firmware voltage using `pw` (`V_FW`). Read the current scale with `p PWR_VOLT_SCALE`, then calculate:
+
+```text
+New scale = Old scale × V_DMM ÷ V_FW
+```
+
+Replace `YOUR_NEW_VALUE` with the calculated number, write it, wait one second, and check `pw` again:
+
+```text
+p PWR_VOLT_SCALE YOUR_NEW_VALUE
+```
+
+For an old scale of 2.000, measured voltage 4.10 V, and displayed voltage 4.00 V, the new scale is `2.000 × 4.10 ÷ 4.00 = 2.050`.
+
+#### SBUS calibration for the RC route
+
+With a receiver installed, switch on the transmitter and run `cr`. Complete the eight stick/switch actions requested by the serial prompts, then check `rc`:
+
+| Operation | Expected normalized value |
+| --- | --- |
+| Roll, pitch, and yaw centered | Near 0 |
+| Throttle minimum / maximum | Near 0 / 1 |
+| Three-position mode switch | Near 0 / 0.5 / 1 |
+
+Android-only and ROS-only aircraft do not require `cr`.
+
+### 4.5 Test all four motors without propellers
+
+Keep the aircraft disarmed and enter:
+
+```text
+mrl
+mrr
+mfr
+mfl
+```
+
+The commands address rear-left M0, rear-right M1, front-right M2, and front-left M3, respectively. Enter only the command itself. Each spins one motor for about one second. Record its physical position and CW/CCW direction viewed from above, then fit the matching propeller using Chapter 3.
+
+### 4.6 Choose a takeoff interface
+
+| Available equipment | Route | Preparation |
+| --- | --- | --- |
+| SBUS receiver and paired transmitter | A: physical RC | Complete `cr` and learn the emergency-stop stick action |
+| No receiver, or phone-based operation | B: Android APK | Connect an Android phone to the aircraft Wi-Fi |
+
+Use one control client for the first flight. Stop ROS and other MAVLink clients when using Android; stop the app's control stream when using physical RC.
+
+#### Route A: SBUS transmitter
+
+| Switch position | Mode | Behavior |
+| --- | --- | --- |
+| Low | STAB | Throttle directly commands thrust; for experienced pilots |
+| Middle | ALT_HOLD | Centered throttle holds height |
+| High | POS_HOLD | Optical flow holds horizontal position; the guide's first-flight route |
+
+Select high/position-hold mode. Minimum throttle and full-right yaw arm the aircraft; motors idle at approximately 10%. Hold throttle above 62.5% for about 0.2 seconds to trigger assisted takeoff to the default 0.60 m height. Center throttle after climbing and make only small horizontal corrections.
+
+For landing, hold throttle below 5% for about 0.3 seconds. The aircraft descends and stops its motors after touchdown. Raising throttle above 60% cancels descent.
+
+Minimum throttle and full-left yaw held for at least 150 ms trigger emergency motor stop. This immediately removes thrust and causes an airborne aircraft to fall; use it when contact with a person, entanglement, or loss of attitude makes controlled landing infeasible.
+
+#### Route B: Android APK
+
+Copy and install `Open32Drone-Controller-0.1.apk`. Android may require temporary permission for the file manager to install an unknown application.
+
+After a complete erase, the defaults are:
+
+```text
+Wi-Fi: open32drone
+Password: 12345678
+Aircraft address: 192.168.4.1
+MAVLink UDP: 14550
+```
+
+Stay connected when Android reports no internet. Open Open32Drone Controller and wait for live flight-controller status. Enter a relative height of `0.65`, then hold the one-key takeoff button for approximately 0.60 seconds. The firmware performs arming, climb, and position-hold entry.
+
+The left stick controls vertical motion and yaw; the right controls forward/backward and lateral motion. Begin with 5–10 seconds of small-area hovering, then hold the landing button. If the aircraft moves rapidly toward people or furniture, use landing while that remains possible; use emergency disarm when a controlled landing is no longer feasible.
+
+Android does not require an RC receiver. If buttons become unavailable, check MAVLink heartbeat and ensure the phone is still on `open32drone` rather than another Wi-Fi network or cellular connection.
+
+### 4.7 First-flight sequence
+
+Use a textured, evenly lit surface and at least 2 m clearance. Keep the battery centered and the downward sensor clean. Wait for gyro calibration, then:
+
+1. Take off to 0.60–0.65 m.
+2. Center the sticks and observe for five seconds.
+3. Make small forward, backward, left, and right movements.
+4. Return near the starting area.
+5. Land automatically and confirm motor stop after touchdown.
+
+Immediate tipping usually points to motor location, rotation, propellers, or IMU orientation. Stop and return to propeller-off checks. If takeoff is stable but vibration, drift, or height variation remains, use the next chapter.
+
+<a id="chapter-5"></a>
+
+## 5. Flight tuning
+
+Start from the observed symptom. Make the mechanical system, sensors, and power supply consistent before changing control parameters. Change one value, repeat the same short flight, and compare the observation and log.
+
+### 5.1 Check whether the cause is a parameter
+
+| Symptom | Check first |
+| --- | --- |
+| Tips immediately after takeoff | M0–M3 positions, rotation, CW/CCW propellers, IMU orientation |
+| One side consistently weak | Propeller damage, bent shaft, connectors, motor temperature, battery sag |
+| Fine, high-frequency vibration | Propellers, shafts, grommets, motor heights, IMU mounting |
+| Position hold fails on particular floors | Texture, reflection, lighting, optical window |
+| Height measurement jumps | ToF window, tilt, near-range blind zone, cable |
+| Balance changes after battery replacement | Battery/accessory positions and actual takeoff mass |
+
+Once mechanically consistent, compare flights with the same battery, floor, and height. A useful standard action is takeoff to 0.65 m, centered-stick hover for five seconds, then landing.
+
+### 5.2 Understand the control layers
+
+```text
+Angular-rate loop → Attitude-angle loop → Height/velocity loop → Horizontal-position loop
+```
+
+Stabilize inner loops before tuning outer loops. P controls correction strength, I removes persistent bias, and D reduces overshoot associated with rapid change. Usually inspect P, then I, and adjust D only when the evidence calls for it.
+
+List parameters:
+
+```text
+p
+```
+
+Read or write one parameter:
+
+```text
+p CTL_R_P
+p CTL_R_P 4.02
+```
+
+Make changes while landed and disarmed with motors stopped. Firmware saves to NVS when writing is permitted. Record the old value, wait a second after writing, and read back. Tables below give matching source defaults; an aircraft may retain older NVS values, so `p PARAMETER_NAME` is authoritative for that device.
+
+### 5.3 Attitude vibration and recovery
+
+| Function | Roll | Pitch | Default |
+| --- | --- | --- | ---: |
+| Angle P | `CTL_R_P` | `CTL_P_P` | 4.47 |
+| Rate P | `CTL_R_RATE_P` | `CTL_P_RATE_P` | 0.05 |
+| Rate I | `CTL_R_RATE_I` | `CTL_P_RATE_I` | 0.20 |
+| Rate D | `CTL_R_RATE_D` | `CTL_P_RATE_D` | 0.001 |
+
+#### High-frequency oscillation
+
+Fix propeller and motor vibration first. If the mechanics are sound, reduce the affected rate P by 5–10%; for example, Roll `0.050 → 0.045`:
+
+```text
+p CTL_R_RATE_P 0.045
+```
+
+Repeat the same five-second hover. If vibration falls and control remains responsive, apply a similar change to Pitch if needed. Do not change P, I, and D together.
+
+#### Slow oscillation or excessive leveling response
+
+Large, low-frequency swings may originate in angle P. Reduce `CTL_R_P` or `CTL_P_P` by about 10%, such as `4.47 → 4.02`. If recovery becomes sluggish, move back toward the original value in small steps.
+
+#### Persistent tilt
+
+Check balance, weak motors, frame deformation, and accelerometer bias. Center the battery and repeat `ca`. Analyze the I term only after the mechanics and calibration are consistent and the bias remains repeatable.
+
+### 5.4 Height problems
+
+| Parameter | Default | Purpose |
+| --- | ---: | --- |
+| `ALT_P` | 0.747 | Main height-error correction |
+| `ALT_I` | 0.10 | Remove persistent height error |
+| `ALT_D` | 0.20 | Use vertical velocity to reduce overshoot |
+| `ALT_HOVER` | 0.49 | Nominal hover-thrust feedforward |
+| `ALT_VEL_MAX` | 0.45 | Maximum vertical command speed |
+
+For slow vertical oscillation, confirm continuous ToF data, then reduce `ALT_P` by approximately 10%:
+
+```text
+p ALT_P 0.67
+```
+
+For persistent height offset after otherwise stable takeoff, inspect `ALT_I`. For overshoot followed by reversal near the target, inspect ToF-derived velocity and `ALT_D`.
+
+`ALT_HOVER` represents collective thrust near nominal voltage. The 81 g aircraft with 60 mm propellers uses 0.49 as a reference. If large height corrections are consistently needed despite sound sensors and attitude, estimate average hover motor command from logs and adjust in small increments. Do not use it to conceal battery deterioration or a weak motor.
+
+### 5.5 Horizontal drift and position hold
+
+| Parameter | Default | Purpose |
+| --- | ---: | --- |
+| `POS_HOLD_P` | 0.85 | Convert position error to velocity target |
+| `POS_VEL_P_X/Y` | 0.35 | Horizontal velocity P |
+| `POS_VEL_I_X/Y` | 0.04 | Horizontal velocity I |
+| `POS_STICK_V` | 0.70 | Maximum horizontal stick speed |
+
+Use `flow` over a clearly textured surface and verify fresh data. Circular position drift during stationary yaw calls for checking the standard 24 mm forward offset and level sensor mounting. Persistent directional drift calls for optical-flow bias, balance, and IMU calibration checks.
+
+If return toward the target is too weak, increase `POS_HOLD_P` slightly. If the aircraft oscillates around it, reduce the gain. Use 5–10% changes with the same height and duration.
+
+### 5.6 Battery and propulsion changes
+
+The reference battery is about 4.2 V when full; available thrust falls during discharge. GPIO1/A0 reads a 100 kΩ / 100 kΩ voltage divider, and assisted altitude/position modes apply bounded feedforward compensation.
+
+Calibrate `PWR_VOLT_SCALE` using `pw` and a multimeter. Compare the same hover with a fresh and lower-charge battery, inspecting `voltage`, `hoverFF`, `voltComp`, and all four outputs. If every motor approaches saturation as voltage drops, check battery resistance, propellers, and motors before raising PID gains.
+
+### 5.7 Compare flights with logs
+
+After disarming, export:
+
+```text
+log dump
+```
+
+Save the CSV and run the repository analyzer:
+
+```bash
+python3 simulation/course/analyze_log.py \
+  --csv /path/to/flight.csv \
+  --output output/my-flight-analysis
+```
+
+Compare commanded and measured Roll/Pitch, ToF and target height, optical-flow velocity and position error, motor outputs and saturation, voltage and compensation, and the timeline around the symptom.
+
+Record the original parameter, new value, repeated action, and observation. Keep a beneficial change and continue incrementally; restore the old value when results worsen. Proceed to ROS after repeatable takeoff, 5–10 seconds of position hold, small translations, and automatic landing.
+
+<a id="chapter-6"></a>
+
+## 6. ROS 2 control
+
+Once basic flight is repeatable, ROS 2 provides programmable access to IMU, range, battery, odometry, takeoff/landing, and movement targets. Start with automatic takeoff/landing, then combine movements into a square.
+
+### 6.1 Prepare the ROS computer
+
+The guide uses Ubuntu 24.04 and ROS 2 Jazzy. Install Desktop using the [official ROS 2 instructions](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html), then install MAVROS and build tools:
+
+```bash
+sudo apt update
+sudo apt install ros-jazzy-mavros ros-jazzy-mavros-extras \
+  python3-colcon-common-extensions python3-rosdep
+sudo ros2 run mavros install_geographiclib_datasets.sh
+```
+
+Copy the repository's ROS package into a workspace:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+mkdir -p ~/osdrone_ws/src
+cp -a /path/to/osrdrone/ros2 ~/osdrone_ws/src/open32drone_driver
+cd ~/osdrone_ws
+rosdep install --from-paths src --ignore-src -r -y
+colcon build --symlink-install
+source install/setup.bash
+```
+
+In each new terminal, source both environments:
+
+```bash
+source /opt/ros/jazzy/setup.bash
+source ~/osdrone_ws/install/setup.bash
+```
+
+### 6.2 Connect the aircraft
+
+Connect the computer directly to `open32drone`. Stop control on the Android phone and close competing clients on the computer, then test:
+
+```bash
+ping -c 3 192.168.4.1
+```
+
+In the first terminal, start the driver:
+
+```bash
+ros2 launch open32drone_driver open32drone.launch.py
+```
+
+For an aircraft connected to a router with `sta`, obtain its IP using `wifi` and supply it at launch:
+
+```bash
+ros2 launch open32drone_driver open32drone.launch.py \
+  aircraft_ip:=192.168.1.42
+```
+
+In a second terminal, check status:
+
+```bash
+ros2 run open32drone_driver control status
+ros2 topic echo /open32drone/connected --once
+```
+
+After `connected` becomes `true`, inspect sensors:
+
+```bash
+ros2 topic hz /open32drone/imu/data
+ros2 topic echo /open32drone/range/downward --once
+ros2 topic echo /open32drone/battery --once
+ros2 topic echo /open32drone/odom --once
+```
+
+### 6.3 Common topics and frames
+
+| Topic | Type | Contents |
+| --- | --- | --- |
+| `/open32drone/connected` | `std_msgs/Bool` | Flight-controller heartbeat connection |
+| `/open32drone/imu/data` | `sensor_msgs/Imu` | Attitude, angular velocity, acceleration |
+| `/open32drone/range/downward` | `sensor_msgs/Range` | Downward ToF range |
+| `/open32drone/battery` | `sensor_msgs/BatteryState` | Measured battery voltage |
+| `/open32drone/odom` | `nav_msgs/Odometry` | Local position and velocity |
+| `/open32drone/cmd_vel` | `geometry_msgs/Twist` | Body-frame velocity target |
+| `/open32drone/goal_pose` | `geometry_msgs/PoseStamped` | Local-frame position target |
+
+`cmd_vel` uses body axes: x forward, y left, z up. `goal_pose` uses the fixed local `odom` frame, which does not rotate with the current heading. The square examples assume the initial nose aligns with local +X and no yaw changes occur. Odometry is an onboard relative estimate, not external absolute ground truth.
+
+```text
+open32drone/odom → open32drone/base_link → open32drone/tof_link
+```
+
+### 6.4 First ROS flight
+
+On first connection, remove propellers and run `ros2 run open32drone_driver bench_test --duration 5`. Check connection, sensors, and status. Power off before fitting propellers, then place the aircraft in the flight area and wait for gyro calibration after startup. Run the supervised test:
+
+```bash
+ros2 run open32drone_driver flight_test --height 0.65 --hover 5
+```
+
+It waits for a live connection, requests takeoff, waits for target height, hovers for five seconds, requests landing, and waits for touchdown/disarm. The terminal reports height, duration, and horizontal movement range.
+
+The same actions can be requested separately:
+
+```bash
+ros2 run open32drone_driver control status
+ros2 run open32drone_driver control takeoff --height 0.65
+ros2 run open32drone_driver control land
+```
+
+For immediate motor stop:
+
+```bash
+ros2 run open32drone_driver control emergency-stop
+```
+
+Emergency stop does not perform a descent; use it only when controlled landing is no longer feasible.
+
+### 6.5 Velocity control
+
+`control velocity` specifies forward, leftward, and upward speed plus an optional yaw rate. It prepares Offboard, streams the target for the requested duration, and sends zero velocity afterward.
+
+After takeoff, move forward at 0.15 m/s for 1.5 seconds:
+
+```bash
+ros2 run open32drone_driver control velocity 0.15 0.00 0.00 \
+  --duration 1.5
+```
+
+Move left:
+
+```bash
+ros2 run open32drone_driver control velocity 0.00 0.15 0.00 \
+  --duration 1.5
+```
+
+Turn left at 0.4 rad/s without translation:
+
+```bash
+ros2 run open32drone_driver control velocity 0.00 0.00 0.00 \
+  --yaw-rate 0.4 --duration 1.5
+```
+
+Negative values reverse direction. For first exercises, keep translation within `±0.15 m/s` and duration at or below 1.5 seconds. Observe whether the aircraft stops after each command.
+
+#### Draw a small square with velocity
+
+After stable takeoff, run forward, left, backward, then right; each nominal edge is about 0.225 m:
+
+```bash
+# Forward, left, backward, right; approximately 0.225 m per edge
+ros2 run open32drone_driver control velocity  0.15  0.00 0.00 --duration 1.5
+ros2 run open32drone_driver control velocity  0.00  0.15 0.00 --duration 1.5
+ros2 run open32drone_driver control velocity -0.15  0.00 0.00 --duration 1.5
+ros2 run open32drone_driver control velocity  0.00 -0.15 0.00 --duration 1.5
+ros2 run open32drone_driver control land
+```
+
+Speed sets travel rate and duration sets nominal distance. Re-capturing position between commands produces rounded corners and some closure error.
+
+### 6.6 Position control and waypoints
+
+`control position x y z` specifies an absolute position in `open32drone/odom`. Read odometry after takeoff to identify the ground origin and current height. If the takeoff origin is near `(0, 0, 0)`, request:
+
+```bash
+ros2 run open32drone_driver control position 0.25 0.00 0.65
+```
+
+This moves 25 cm along local +X while maintaining 65 cm height. Four waypoints form a 25 cm square:
+
+```bash
+ros2 run open32drone_driver control position 0.25 0.00 0.65
+sleep 3
+ros2 run open32drone_driver control position 0.25 0.25 0.65
+sleep 3
+ros2 run open32drone_driver control position 0.00 0.25 0.65
+sleep 3
+ros2 run open32drone_driver control position 0.00 0.00 0.65
+sleep 3
+ros2 run open32drone_driver control land
+```
+
+If the local origin is not zero, offset the points by takeoff `x0`, `y0`, and ground `z0`. Keep a new target within 0.8 m horizontally of the current position.
+
+### 6.7 Publish messages directly
+
+Start Offboard before continuously publishing `Twist`:
+
+```bash
+ros2 run open32drone_driver control offboard start
+```
+
+Publish at least 10 Hz; this terminal example uses 20 Hz:
+
+```bash
+ros2 topic pub -r 20 /open32drone/cmd_vel geometry_msgs/msg/Twist \
+  "{linear: {x: 0.10, y: 0.0, z: 0.0}, angular: {z: 0.0}}"
+```
+
+After `Ctrl+C` stops velocity publication, a still-running ROS Offboard node with valid position feedback captures the current position after its default 0.50-second command timeout and continues sending hold targets. Loss of the entire target stream instead invokes the firmware's separate 0.30-second Offboard timeout. These are different timers. Production programs should explicitly send zero velocity and request landing before exit.
+
+### 6.8 Inspect flight with RViz and rosbag
+
+Enable RViz at launch:
+
+```bash
+ros2 launch open32drone_driver open32drone.launch.py use_rviz:=true
+```
+
+Record a flight:
+
+```bash
+ros2 bag record \
+  /open32drone/imu/data \
+  /open32drone/range/downward \
+  /open32drone/odom \
+  /open32drone/battery \
+  /open32drone/flight/status \
+  /open32drone/offboard/status
+```
+
+Replay to compare movement, trajectory, height, and voltage. ROS now connects state, targets, actions, and feedback; the next chapter adds a policy trained through repeated simulated experience.
+
+For multi-aircraft naming, interfaces, and maintenance, see [ROS 2 and automatic flight](docs/AUTOMATIC_FLIGHT_AND_ROS2.md).
+
+<a id="chapter-7"></a>
+
+## 7. Simulation and reinforcement learning
+
+ROS divides flight into state, targets, and actions. Reinforcement learning keeps this feedback structure but learns corrections through many simulated flights with wind, propulsion differences, and model error.
+
+The project uses residual learning. A geometric PD controller handles attitude stabilization and four-motor allocation; PPO outputs three-axis acceleration corrections. This gives actions a clear physical meaning and focuses learning on effects that the base model describes poorly.
+
+### 7.1 Represent the aircraft as a robot model
+
+The URDF/USD model has a rigid body and four rotor joints:
+
+```text
+base_link
+├── rotor_0_link  — continuous — rear left M0
+├── rotor_1_link  — continuous — rear right M1
+├── rotor_2_link  — continuous — front right M2
+├── rotor_3_link  — continuous — front left M3
+├── battery_link — fixed
+├── camera_link  — fixed
+├── imu_link     — fixed sensor frame
+└── flow_tof_link — fixed
+    ├── flow_link — fixed optical frame
+    └── tof_link  — fixed range frame
+```
+
+`base_link` includes the frame, PCB, XIAO, grommets, motor casings, power circuitry, and fixed supports. IMU and optical-flow/ToF frames support sensor references; their physical mass is included in the rigid body. A separate battery link permits mass/position changes. The camera is fixed, and each propeller uses a continuous joint.
+
+| Component | Reference mass |
+| --- | ---: |
+| Rigid body `base_link` | 54.2547 g |
+| Four propellers | Approximately 1.4542 g |
+| 18350 battery | 25.0000 g |
+| Camera | Approximately 0.2911 g |
+| Total | 81.0000 g |
+
+The video combines four Isaac Sim checks: appearance and 81 g configuration, PCB close-up, unpowered free fall, and motion of the four rotor joints.
+
+[![Robot model and physics checks; open video](img/model-checks-poster.png)](img/videos/model-checks.mp4)
+
+[Open video: robot model and physics checks](img/videos/model-checks.mp4)
+
+### 7.2 Start with an approximate motor model
+
+Motor dimensions and a maximum 50,000 rpm do not establish thrust with a 60 mm propeller. The corresponding angular speed is:
+
+```text
+50,000 × 2π ÷ 60 = 5,235.99 rad/s
+```
+
+This can inform a joint-speed limit but is not a measured loaded speed or thrust. Begin with hover force:
+
+```text
+Average hover thrust per motor
+= Total mass × Gravity ÷ 4
+= 0.081 kg × 9.80665 m/s² ÷ 4
+≈ 0.1986 N
+≈ 20.25 gf
+```
+
+Read mean motor commands during stable hover from a voltage-recording log. The reference is approximately 47.4%, giving a rough full-command extrapolation of 0.419 N per motor, with a 40 ms initial response-time estimate. Randomize thrust gain, mass, inertia, voltage, and response time during training rather than relying on these approximate values.
+
+This supports an initial training/evaluation workflow. A single-motor thrust stand can later measure PWM points at 4.2, 3.9, 3.7, and 3.5 V and replace the estimates incrementally.
+
+### 7.3 Define the learning task
+
+The hover exercise has 35 observation dimensions: position/velocity errors, attitude matrix, angular velocity, reference velocity and acceleration, previous action, integrated error, estimated motor force, and voltage. The three actions are residual x/y/z accelerations bounded to `±4 m/s²`.
+
+Environments vary initial attitude, propulsion, and wind. Rewards favor position/velocity tracking, maintained attitude and height, smooth actions, and avoidance of overturning, ground contact, or leaving the allowed region. PPO gathers observation/action/outcome sequences across many environments and updates the policy. Evaluation compares PD and residual PPO using held-out seeds and stronger disturbances.
+
+### 7.4 Run a first PPO experiment on a regular computer
+
+Create an environment from the repository root:
+
+```bash
+python3 -m venv .venv
+source .venv/bin/activate
+python3 -m pip install --upgrade pip
+python3 -m pip install numpy torch matplotlib
+```
+
+Run the CPU hover exercise:
+
+```bash
+python3 simulation/course/hover_lab.py \
+  --output output/my-first-hover \
+  --iterations 400 --envs 128 --device cpu
+```
+
+| Output | Contents |
+| --- | --- |
+| `training.csv` | Per-iteration rewards, position errors, and failures |
+| `policy_initial.pt` / `policy_final.pt` | Initial and final policies |
+| `actor.pt` | Standalone TorchScript policy |
+| `evaluation.json` | Held-out PD/PPO comparison |
+| `config.json` | Complete training settings |
+
+The following values are transcribed from the companion guide's reference simulation: mean RMS position error over 96 complete episodes. They provide a reproduction reference, were not rerun during this tutorial update, and are not real-aircraft accuracy measurements.
+
+| Horizontal disturbance | Base PD | Residual PPO |
+| ---: | ---: | ---: |
+| 0.0 m/s² | 1.58 cm | 3.64 cm |
+| 0.8 m/s² | 16.51 cm | 6.03 cm |
+| 1.5 m/s² | 30.48 cm | 10.56 cm |
+
+PD is more accurate in calm conditions; learned compensation reduces error under stronger sustained disturbance. The base controller still handles stabilization.
+
+![PD and PPO position error under three disturbances](img/hover-evaluation.png)
+
+Figure 7-1. Held-out comparison for the CPU hover exercise.
+
+![PPO training curves](img/training-curves.png)
+
+Figure 7-2. Training reward and error curves.
+
+### 7.5 Extend hover to continuous flight
+
+The full demonstration tracks a figure-eight through ten rings, climbs a spiral, and holds position in gusts. A program defines the trajectory; PPO learns tracking corrections and disturbance compensation.
+
+Compare fixed-camera hovering under the same disturbance:
+
+[![Base PD hover; open video](img/hover-pd-poster.png)](img/videos/hover-pd.mp4)
+
+[Open video: base PD hover](img/videos/hover-pd.mp4)
+
+Base PD develops a larger steady offset under sustained disturbance.
+
+[![Residual PPO hover; open video](img/hover-ppo-poster.png)](img/videos/hover-ppo.mp4)
+
+[Open video: residual PPO hover](img/videos/hover-ppo.mp4)
+
+Residual PPO plus PD compensates the disturbance and returns closer to the target.
+
+The 60-second overview includes the model, training workflow, hover comparison, figure-eight rings, spiral, and gust recovery:
+
+[![Complete learning demonstration; open video](img/rl-demo-poster.png)](img/videos/rl-demo-60s.mp4)
+
+[Open video: complete learning demonstration, 60 seconds](img/videos/rl-demo-60s.mp4)
+
+The companion guide reports 10/10 rings, approximately 12.11 cm position RMS error, and approximately 1.10 m/s maximum speed during a 34-second Isaac Sim flight. Its independent simulation scenarios below are a separate evaluation from the CPU exercise above.
+
+| Scenario | Base PD | Residual PPO + PD |
+| --- | ---: | ---: |
+| Calm | 2.72 cm | 8.19 cm |
+| Sustained disturbance | 51.33 cm | 18.43 cm |
+| Motor variation and mass error | 53.81 cm | 14.28 cm |
+| Abrupt gust | 34.46 cm | 26.92 cm |
+
+### 7.6 Reproduce full training and Isaac Sim
+
+The full training script uses CUDA. Run physics checks on the training workstation:
+
+```bash
+cd /path/to/osrdrone/simulation/rl_demo
+python3 physics_checks.py \
+  --output ../../output/rl-demo/my-run/physics-checks.json
+```
+
+Train, evaluate, and check the course:
+
+```bash
+python3 train.py \
+  --output ../../output/rl-demo/my-run \
+  --iterations 1200 --envs 1024
+
+python3 evaluate.py --run ../../output/rl-demo/my-run
+python3 preflight.py --run ../../output/rl-demo/my-run
+```
+
+Training and evaluation use the PyTorch simulation environment; Isaac Sim/PhysX provides a separate validation and visualization stage. Prepare the `OPEN32DRON_fixed_81g` model package first, checking its instructions, mass parameters, and USD resources. If you have only the source checkout, prepare the model following repository `docs/SIMULATION_MODEL.zh-CN.md`; do not pass an empty directory to `--package`.
+
+Launch Isaac's own Python environment with its `python.sh`:
+
+```bash
+/path/to/isaac-sim/python.sh \
+  /path/to/osrdrone/simulation/rl_demo/native_isaac.py \
+  --package /path/to/osrdrone/output/simulation-model/OPEN32DRON_fixed_81g \
+  --run /path/to/osrdrone/output/rl-demo/my-run \
+  --output /path/to/osrdrone/output/rl-demo/my-run/native \
+  --seconds 34 --record --visible
+```
+
+`native_isaac.py` applies the combined motor force and torque every 5 ms. PhysX integrates position and attitude; the trajectory, rings, and camera do not reposition the aircraft frame by frame.
+
+### 7.7 Progress toward a real-aircraft policy
+
+Three useful next steps are:
+
+1. Replace initial maximum thrust, response-time, and reaction-torque values with thrust-stand measurements.
+2. Add IMU, optical-flow, and ToF noise, latency, and dropped measurements to training.
+3. Convert ROS recordings into the policy's 35-dimensional input, beginning with replay inference, then constrained bench work and low-altitude trials.
+
+The current policy uses simulation state and task-provided ring positions. Future camera work can add localization or detection. Begin with bounded acceleration or velocity corrections through ROS and the existing flight-control loop; investigate lower-level actuator control only after sufficient bench evidence.
+
+The development route now connects manufactured hardware, stabilizing firmware, ROS interfaces, URDF/USD models, and a policy that can adapt control to selected disturbances and model errors.
+
+<a id="development"></a>
+
+## Appendix A: Source builds and architecture
+
+### A.1 When to build from source
+
+Use Chapter 4's matching release bundle for the standard aircraft. Build from source when changing sensors, pins, control logic, or communication. Keep firmware, Android, and ROS 2 versions compatible; record the source revision, build options, and parameter snapshot after each change.
+
+### A.2 Fixed development environment
+
+| Item | Matching version or option |
+| --- | --- |
+| Arduino IDE | 2.x, or use Arduino CLI |
+| Arduino-ESP32 | 3.3.6 |
+| FlixPeriph | 1.10.4, including IMU/SBUS peripheral support |
+| MAVLink Arduino library | 2.0.25 |
+| Board | `esp32:esp32:XIAO_ESP32S3` |
+| PSRAM | OPI |
+| Partition / flash mode | `default_8MB` / DIO |
+| Standard IMU | MPU6500/MPU9250; validate alternatives separately |
+
+Add the ESP32 board index in Arduino IDE, install the specified version, and select XIAO ESP32-S3 and the actual serial port. Follow the table for configuration; the retained screenshots only illustrate menu locations.
+
+```text
+https://espressif.github.io/arduino-esp32/package_esp32_index.json
+```
+
+![Arduino IDE board-index settings](img/software1.PNG)
+
+![Board Manager; use the version in the table](img/software2.PNG)
+
+![XIAO ESP32-S3 and serial-port selection](img/software3.PNG)
+
+From the source root, Arduino CLI can build with:
+
+```bash
+arduino-cli core install esp32:esp32@3.3.6 \
+  --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+arduino-cli lib install "FlixPeriph@1.10.4" "MAVLink@2.0.25"
+arduino-cli compile --clean \
+  --fqbn 'esp32:esp32:XIAO_ESP32S3:PSRAM=opi,PartitionScheme=default_8MB,FlashMode=dio' \
+  --output-dir /tmp/open32drone-build firmware
+```
+
+Open `firmware/firmware.ino` in Arduino IDE; all `.ino` tabs in that directory form one sketch. Remove propellers and close competing serial applications before uploading. Successful compilation still requires sensor, motor-mapping, and controlled-flight checks. Use Chapter 4's merged image to install the full partition layout on a new board; a sketch application file does not replace it.
+
+<a id="firmware-architecture"></a>
+
+### A.3 Flight-control firmware architecture
+
+The flight-critical chain runs in a fixed order: input acquisition, state estimation, target selection, cascaded control, mixing, and motor output. The main-loop target is 300 Hz. Optical-flow/ToF state and dependent control update on new valid measurements. Network, camera, and maintenance functions cannot replace the motor-control chain.
 
 ```mermaid
 flowchart LR
-  INPUT["imu · rc · flow"] --> EST["estimate"]
-  EST --> SAFE["safety · ownership"]
-  SAFE --> CTRL["auto · altitude · position · attitude · rate"]
-  CTRL --> MOTOR["mix · PWM"]
-  MOTOR --> SERVICE["CLI · MAVLink · log · NVS"]
-  CAMERA["OV3660"] --> STREAM["lower-priority HTTPD video task"]
+    INPUT[IMU / SBUS / Optical flow and ToF] --> EST[Attitude and relative-state estimation]
+    EST --> TARGET[Ownership and target selection]
+    TARGET --> CTRL[Height / Position / Attitude / Rate]
+    CTRL --> MOTOR[Mixing and four PWM outputs]
+    EST --> LOG[Logs and diagnostics]
+    CTRL --> LOG
+    NET[Android / ROS 2] --> TARGET
 ```
 
-| Layer | Files | Code boundary |
-|---|---|---|
-|Entry and scheduling|`firmware.ino`, `time.ino`|Build switches, startup order, 64-bit monotonic time, main loop, and task priorities|
-|Inputs|`imu_backend.h`, `imu.ino`, `rc.ino`, `flow.ino`|Compile-time selected IMU, SBUS, and TF-0850 packets with separate ToF and XY-flow sequences, timestamps, and health states|
-|Estimation|`estimate.ino`|Attitude, ToF height/vertical speed, and horizontal velocity/relative position with angular-rate time alignment|
-|Control|`control.ino`, `control_modes.ino`, `control_offboard.ino`, `control_auto_flight.ino`, `control_altitude.ino`, `control_position.ino`, `control_stabilization.ino`|Shared state plus ownership, Offboard, automatic flight, altitude, position, attitude, and rate layers|
-|Safety and power|`safety.ino`, `power.ino`|Arm checks, link-loss descent, sustained-tip motor stop, battery voltage, and hover-thrust feedforward|
-|Actuation|`motors.ino`|Quad-X mapping and four LEDC PWM outputs|
-|Communications|`mavlink.ino`, `wifi.ino`, `camera.ino`, `ota.ino`|MAVLink, AP/STA networking, optional video, and ground-only A/B OTA|
-|Observability|`cli.ino`, `log.ino`|Local serial diagnostics, 25 Hz RAM logs, and performance sampling every 16 cycles|
-|Configuration and math|`parameters.ino`, `*.h`|Parameter validation/NVS, PID, filtering, quaternion, and vector utilities|
+| Responsibility | Source entry | What to inspect |
+| --- | --- | --- |
+| Startup and scheduling | `firmware.ino`, `time.ino` | Initialization, control period, rate-limited services |
+| Sensors and RC | `imu_backend.h`, `imu.ino`, `rc.ino`, `flow.ino` | Axes, calibration, sequence numbers, timestamps, freshness |
+| State estimation | `estimate.ino` | Attitude, ToF height/vertical velocity, flow rotation and mounting-offset compensation |
+| Modes and external control | `control.ino`, `control_modes.ino`, `control_offboard.ino` | Shared state, ownership, target-stream warmup and admission |
+| Automatic flight | `control_auto_flight.ino` | Preflight, climb, takeover, descent, touchdown |
+| Cascaded control | `control_altitude.ino`, `control_position.ino`, `control_stabilization.ino` | Outer targets through attitude, rates, and mixing |
+| Motors and power | `motors.ino`, `power.ino` | Numbering, PWM, voltage measurement and compensation |
+| Failure handling | `safety.ino` | Preflight, connection-loss behavior, sustained-overturn motor stop |
+| Communication and updates | `mavlink.ino`, `wifi.ino`, `camera.ino`, `ota.ino` | AP/STA, gated commands, optional streaming, A/B OTA |
+| Diagnostics and parameters | `cli.ino`, `log.ino`, `parameters.ino` | CLI, RAM logs, timing samples, NVS |
 
-`flow.ino` receives TF-0850 data, `estimate.ino` updates height state, and `control_altitude.ino` implements altitude control. The flow/ToF module is mounted about 24 mm forward of the yaw center, and the horizontal estimator compensates that geometry.
+These are responsibility boundaries, not separate threads. Height comes from downward ToF; Minimal has no barometer control path. Firmware owns automatic takeoff/landing, while Android and ROS request the action. See the [firmware architecture document](docs/FIRMWARE_ARCHITECTURE.md) for further call relationships.
 
-##### 2.2 Hardware Pin Mapping
+### A.4 Wiring reference
 
-The following pins are directly tied to the baseboard hardware. Confirm the baseboard schematic before making changes:
+Motor numbering matches Chapter 3. Check the schematic and voltage requirements before changing a board or pin mapping.
 
-| Peripheral | GPIO | Description |
-|---|---|---|
-| I2C SDA | 2 | Compile-time selected IMU data, 400 kHz |
-| I2C SCL | 43 | Compile-time selected IMU clock line |
-| Optical-flow RX | 8 | Serial1 RX, connected to optical-flow module TX. Protocol: frame header 0xDF, 19-byte packet, 115200 bps |
-| Optical-flow TX | 7 | Serial1 TX, connected to optical-flow module RX |
-| SBUS RX | 44 | Serial2 RX, 100 Kbps, 25-byte frame |
-| SBUS TX | 9 | Serial2 TX |
-| LED | 21 | Onboard NEOPIXEL |
-| Battery voltage | 1 / A0 | `VBAT_SW × 0.5` divider input |
-| MOTOR 0 | 4 | LEDC PWM 10 kHz -> AO3400 -> rear left (CW) |
-| MOTOR 1 | 3 | Rear right (CW) |
-| MOTOR 2 | 6 | Front right (CCW) |
-| MOTOR 3 | 5 | Front left (CCW) |
+| Interface | GPIO | Connection |
+| --- | --- | --- |
+| IMU SDA / SCL | 2 / 43 | I²C data / clock |
+| Optical-flow RX / TX | 8 / 7 | Module TX / RX, respectively; 115200 baud |
+| SBUS RX / TX | 44 / 9 | Follow receiver and board interface definitions |
+| Battery ADC | 1 / A0 | 100 kΩ / 100 kΩ divider |
+| M0 / M1 / M2 / M3 | 4 / 3 / 6 / 5 | Rear left / rear right / front right / front left |
 
-#### 3. Core Subsystems
+Confirm actual motor directions without propellers and match the current mixer requirements: diagonals share a direction and adjacent motors are opposite. Do not assume an old wiring table describes the present assembly.
 
-##### 3.1 Optical-Flow Sensor (`flow.ino`)
+<a id="maintenance"></a>
 
-**Packet format**
+## Appendix B: A/B OTA and maintenance
 
-| Byte | Field | Description |
-|---|---|---|
-| 0 | Header | 0xDF |
-| 1-3 | ID/Dev/Sta | 0x15, 0x00, 0x55 |
-| 4 | Len | 0x0C, data length 12 bytes |
-| 6-7 | ToF | uint16, in mm |
-| 10-11 | FlowX | int16, pixel displacement |
-| 12-13 | FlowY | int16, pixel displacement |
-| 14-15 | IntTime | uint16, in us |
-| 16 | Valid | 245 = data valid |
-| 18 | Checksum | Sum of the first 18 bytes & 0xFF |
+### B.1 Full installation versus wireless update
 
-**Velocity conversion formula**
+For a new device or partition recovery, write `Open32Drone-minimal-merged.bin` over USB at `0x0`. For an existing matching A/B layout, use `Open32Drone-minimal-app.bin` for wireless updates. A complete erase removes calibration, parameters, and Wi-Fi settings and requires recalibration.
 
-```text
-v = flow * (1/10000) * height(m) / dt(s)
-```
+### B.2 Update the application
 
-**Validity conditions**
+1. Land, disarm, remove propellers, and stop automatic flight, Offboard, and streaming.
+2. Check matching firmware/APK/ROS versions and verify the app image with `SHA256SUMS`.
+3. Run `ota` in the local serial terminal for slot state and the device upload token.
+4. Select the aircraft address and app image in the matching Android or ROS uploader, supplying the token when prompted.
+5. The uploader supplies length and SHA-256; firmware writes the inactive slot.
+6. After reboot, check `sys`, `imu`, `flow`, and `ota`, then complete propeller-off acceptance checks.
 
-- `dataValid == true` (byte 16 = 245)
+The new slot must pass startup health checks before confirmation; failure invokes rollback to the previous slot. Never submit the merged image to the wireless uploader. Further maintenance details are in the companion ROS/automatic-flight document and source-repository `releases/minimal/README.md`.
 
-- Height: 0.05 m to 6 m
+### B.3 Networks and clients
 
-- Integration time greater than zero
+Use `wifi` to inspect AP/STA, aircraft IP, and connection state. The default recovery hotspot is `open32drone`; saved custom settings take precedence, so use the actual serial output. Configure networking with `ap <ssid> <password>` or `sta <ssid> <password>`, reboot, and check the result.
 
-- Health timeout: no valid data for 150 ms -> unhealthy
+Use one ordinary control client at a time. Physical SBUS actions can take ownership; Android and ROS should not transmit competing control streams. QGroundControl is limited to standard parameter inspection/editing while disarmed, not tutorial takeoff or route control. Optional MJPEG does not participate in position estimation, and the ROS package does not provide its `camera_info`.
 
-##### 3.2 Attitude Estimation (`quaternion.h` + `estimate.ino`)
+<a id="diagnostics"></a>
 
-**Quaternion attitude estimator**
+## Appendix C: Diagnostics and experiment records
 
-- Low-pass-filtered gyroscope rates are integrated into the attitude quaternion as rotation vectors.
+### C.1 Common serial commands
 
-- While landed, the accelerometer corrects the estimated gravity direction with `EST_ACC_WEIGHT=0.003`.
+| Command | Purpose |
+| --- | --- |
+| `help` | Commands actually supported by the installed firmware |
+| `sys`, `time`, `perf` | Firmware identity, loop periods, stage execution times |
+| `imu`, `ps`, `psq` | IMU calibration, Euler angles, quaternion |
+| `flow`, `alt` | Flow/ToF, estimates, altitude-control state, admission/rejection reasons |
+| `pw` | Battery ADC and calibrated voltage |
+| `rc`, `cr` | Receiver state and calibration |
+| `ca` | Six-face accelerometer calibration |
+| `mrl`, `mrr`, `mfr`, `mfl` | Propeller-off motor tests, M0/M1/M2/M3 in order |
+| `mot` | Four motor outputs |
+| `p`, `p <name>`, `p <name> <value>` | List/read parameters and modify while landed/disarmed |
+| `log dump` | Export RAM CSV after flight, disarmed with motors stopped |
+| `wifi`, `ota` | Network and A/B update state |
 
-- In flight, gravity correction uses the weaker `EST_LVL_WEIGHT=0.0002` only when thrust, acceleration norm, and angular rate pass reliability checks.
+RAM logs retain a limited recent history, approximately 25 Hz and 12 seconds in the matching implementation. Export promptly after flight. They are not persistent black-box recordings and there is no separate collision-event buffer. Assess period distributions, overruns, and stage timing instead of average frequency alone.
 
-- Roll, Pitch, and Yaw share one quaternion representation, avoiding axis coupling from direct Euler-angle integration.
+### C.2 Troubleshoot by symptom
 
-**Altitude estimation**
+| Symptom | Check in order |
+| --- | --- |
+| No USB serial port | Data cable, BOOT/RESET, actual port, other applications holding the port |
+| Startup calibration does not finish | Keep still, IMU power/cable, rigid mounting, `imu` |
+| Immediate tip or uncontrolled yaw | Stop motors, positions/directions, propellers, board/IMU axes |
+| Position correction increases error | Flow translation signs, rotation compensation, ToF scale, admission state; do not increase gains first |
+| Height jumps | ToF window/floor, mounting angle, cable/freshness, `alt` and logs |
+| Sinking or saturation after battery change | Voltage calibration, sag, balance, motors/propellers |
+| App unavailable or ROS disconnected | Actual Wi-Fi, IP, UDP 14550, competing clients, heartbeat |
+| Unexpected motion after ROS velocity stops | Offboard node, position feedback, logs; distinguish input timeout from aircraft stream loss |
+| PPO/Isaac will not run | Dependencies, CPU/CUDA route, model package, policy outputs, paths |
 
-- Height comes directly from the optical-flow module's ToF sensor, with `position.z` storing filtered relative height above ground.
+### C.3 Keep a reproducible record
 
-- Height difference between valid samples produces `velocity.z`, followed by low-pass filtering.
+For each run, save hardware configuration and mass, firmware/client versions, old/new parameters, battery state, floor/lighting, test action, CSV/rosbag, and observations. For simulation also save configuration, seeds, policy files, and evaluation results.
 
-- A height jump above 0.45 m is accepted at 10%, and the maximum height-change rate is limited to 2 m/s.
-
-- Height and vertical speed reset when the motors are stopped and ToF is invalid.
-
-**Horizontal velocity and position**
-
-- Flow displacement is converted using ToF height and integration time, then compensated with angular rates from 40 ms earlier to obtain `flowCompBodyVel`.
-
-- The compensated velocity passes through ground bias learning, a three-sample median, innovation limiting, and low-pass smoothing before world-frame conversion.
-
-- The control variables `velocity.x/y` and `position.x/y` are updated only after `flowAirborne=true`; before takeoff, ground zero-velocity locking is enabled to prevent floor texture noise from drifting the position-hold target.
-
-- Airborne detection requires arming, throttle above 0.12, fresh flow, and valid ToF continuously for 250 ms.
-
-##### 3.3 Flight Control (`control.ino` + `control_*.ino`)
-
-**Progressive control modes**
-
-| Mode | Value | Behavior |
-|---|---|---|
-| STAB | 2 | Default attitude-stabilized mode. Throttle maps directly to collective thrust, and Roll/Pitch sticks map to attitude targets. |
-| ALT_HOLD | 4 | ToF altitude hold. Mid-throttle holds the target height; deviation from mid-stick commands bounded vertical speed. Collective thrust combines hover feedforward and altitude PID. |
-| POS_HOLD | 5 | Optical-flow position hold. The controller locks position after altitude and horizontal estimates qualify; Roll/Pitch sticks move the target through velocity commands. |
-
-`AUTO` is an internal ownership state for automatic flight and validated Offboard control, not a fourth pilot mode. The three public modes reuse the same attitude, rate, and mixer inner loops and add vertical and horizontal feedback only when ToF and optical-flow state qualify.
-
-**Mode switching with RC channel 6**
-
-```cpp
-ch6 < 25%      -> STAB
-ch6 25% ~ 75% -> ALT_HOLD
-ch6 > 75%     -> POS_HOLD
-```
-
-**Arming and disarming**
-
-```cpp
-Arm: throttle lowest + yaw full right
-Disarm: throttle lowest + yaw full left
-```
-
-**Main altitude-hold and position-hold parameters**
-
-| Parameter | Default | Description |
-|---|---:|---|
-| Altitude PID | Current registered firmware values | Device values may be overridden by NVS; read back `ALT_P`, `ALT_I`, and `ALT_D` with `p` |
-| `ALT_HOVER` | 0.49 | Reboot baseline for hover thrust; adapted slowly in RAM after takeoff |
-| `ALT_VEL_MAX` | 0.45 m/s | Maximum vertical-speed command outside the throttle mid-stick deadband |
-| `POS_HOLD_P` | 0.80 | Position error to horizontal velocity target |
-| `POS_STICK_V` | 0.70 m/s | Target-point speed at full Roll/Pitch stick |
-| `POS_VEL_P_X/Y` | 0.30 / 0.30 | Horizontal velocity-loop proportional gain |
-| `POS_VEL_I_X/Y` | 0.10 / 0.10 | Horizontal velocity-loop integral gain, limited to 0.08 rad per axis |
-| `POS_VEL_D_X/Y` | 0 / 0 | Horizontal velocity-loop derivative gain |
-| `POS_CMD_RATE` | 1.20 rad/s | Position-control attitude-command slew limit |
-| `FLOW_GYRO_P/R` | -0.78 / -0.77 | Pitch/Roll rotational-flow compensation |
-| `FLOW_GYRO_DLY` | 40 ms | Flow and angular-rate time alignment |
-
-##### 3.4 MAVLink Debugging (`mavlink.ino`)
-
-**Transmitted messages**
-
-| Message | Frequency | Description |
-|---|---|---|
-| HEARTBEAT / CURRENT_MODE | 2 Hz | Reports GENERIC quadrotor identity, current custom mode, and arm state |
-| EXTENDED_SYS_STATE / SYS_STATUS | 2 Hz | Reports landed state, sensor health, and system status |
-| BATTERY_STATUS | 2 Hz | Reports measured voltage when a voltage-sense pin is configured; default hardware reports unknown |
-| ATTITUDE_QUATERNION | 10 Hz | Quaternion attitude and angular velocity, converted according to MAVLink FRD coordinate conventions |
-| RC_CHANNELS_RAW (#35) | ~10 Hz | Raw PWM values for 16 channels |
-| ACTUATOR_CONTROL_TARGET | 10 Hz | Current normalized outputs for four motors |
-| SCALED_IMU | 10 Hz | Accelerometer and gyroscope data |
-| LOCAL_POSITION_NED / DISTANCE_SENSOR | 10 Hz | Reports onboard relative position/velocity and valid ToF range |
-
-**Important received messages**
-
-| Message / Command | Function |
-|---|---|
-| MANUAL_CONTROL | External manual control, mapped to throttle, pitch, roll, and yaw |
-| PARAM_REQUEST_LIST / PARAM_REQUEST_READ / PARAM_SET | Parameter reading and setting |
-| MAV_CMD_COMPONENT_ARM_DISARM | MAVLink arming/disarming; arming is rejected when throttle is higher than 0.05 |
-| MAV_CMD_DO_SET_MODE / DO_SET_STANDARD_MODE | Selects supported stabilized, altitude, position, and AUTO modes |
-| MAV_CMD_NAV_TAKEOFF / MAV_CMD_NAV_LAND | Executes sensor-gated automatic takeoff and landing |
-| SET_ATTITUDE_TARGET | Receives attitude, rate, and thrust targets in AUTO after stream warmup |
-| SET_POSITION_TARGET_LOCAL_NED | Receives bounded local position/velocity and altitude/vertical-speed targets in AUTO |
-| SERIAL_CONTROL | Mirrors local diagnostic text to MAVLink only; no inbound remote shell is accepted |
-
-Minimal does not accept direct MAVLink motor control. Use the standard parameter protocol only while disarmed; in flight, the supported entry points are gated lifecycle commands, a manual-control lease, and Offboard position or velocity targets.
-
-##### 3.5 ROS 2 / MAVROS Integration
-
-The repository connects MAVROS to flight-controller UDP 14550 and provides IMU/odometry/ToF/battery/RC interfaces, `/cmd_vel`, `/goal_pose`, lifecycle commands, TF, RViz2, and acceptance tools. The aircraft creates AP `open32drone` by default or can explicitly join a router in STA mode; only Android or ROS 2 may control one aircraft at a time. The current ROS package does not relay experimental HTTP MJPEG or publish `camera_info`. Installation, single- and multi-aircraft naming, public interfaces, and supervised flight are consolidated in [ROS 2 Companion Software and Automatic Flight](docs/AUTOMATIC_FLIGHT_AND_ROS2.md).
-
-**Architecture**
-
-```python
-open32drone_driver
-├── MAVROS                 <- UDP 14550 -> Open32Drone
-├── interface_bridge       <- Reliable IMU/odom/ToF/battery/RC + diagnostics + TF
-├── flight_manager         <- arm/takeoff/land/mode commands
-├── offboard_control       <- 20 Hz position/velocity targets and watchdog
-└── rc_bridge              <- explicitly enabled raw RC stream
-```
-
-**Key parameters**
-
-| Parameter | Value | Description |
-|---|---|---|
-| `fcu_url` | `udp://0.0.0.0:14550@192.168.4.1:14550` | Default AP connection; replace the address with serial `wifi` output in STA mode |
-| `tgt_system / tgt_component` | `1 / 1` | MAVLink target identifiers for Open32Drone |
-| setpoint rate | 20 Hz | Offboard node continuously refreshes position or velocity targets |
-| warmup | at least 0.35 s, 5 samples, 10 Hz | Firmware checks stream continuity before entering AUTO |
-| watchdog | 0.30 s | Onboard Offboard failure handling starts after target updates stop |
-| public QoS | Reliable | Bridge topics such as `/imu/data`, `/odom`, and `/range/downward` support ordinary ROS tools |
-
-##### 3.6 ROS 2 Manual-Control Command Reference
-
-The tutorial keeps only the shortest operating path; the interface table, multi-aircraft naming, TF, acceptance rules, and troubleshooting live in the dedicated ROS 2 guide. Automatic takeoff lets the firmware perform preflight, arming, climb, and position-hold handover before a finite-duration body-frame target is sent.
-
-| Action | Parameter | Command |
-|---|---|---|
-| Take off | 0.65 m above the takeoff surface | `ros2 run open32drone_driver control takeoff --height 0.65` |
-| Move forward | +X, 0.25 m/s for 1.5 s | `ros2 run open32drone_driver control velocity 0.25 0.00 0.00 --duration 1.5` |
-| Move left | +Y, 0.25 m/s for 1.5 s | `ros2 run open32drone_driver control velocity 0.00 0.25 0.00 --duration 1.5` |
-| Climb | +Z, 0.20 m/s for 1 s | `ros2 run open32drone_driver control velocity 0.00 0.00 0.20 --duration 1` |
-| Land | Controlled descent and automatic disarm | `ros2 run open32drone_driver control land` |
-
-`/cmd_vel` uses body coordinates (+X forward, +Y left, +Z up), while `/goal_pose` is an absolute target in `open32drone/odom`. Keep one control source active, run `ros2 run open32drone_driver bench_test --duration 5` with propellers removed before automatic flight, and use `control status` to verify a live connection.
-
-##### 3.7 A/B Firmware Update and the Minimal Bundle
-
-The current development configuration uses the ESP32-S3 8 MB `default_8MB` A/B layout: `ota_0` starts at `0x10000`, `ota_1` at `0x340000`, and each app slot is `0x330000` bytes. A legacy single-app layout requires one USB migration; subsequent wireless updates write only the inactive slot.
-
-The matched files under `releases/minimal/` are:
-
-| File | Purpose |
-|---|---|
-|`Open32Drone-minimal-merged.bin`|Complete 8 MiB USB image written at `0x0` for a new MCU or recovery after full erase|
-|`Open32Drone-minimal-app.bin`|Application image for ground-only A/B OTA|
-|`Open32Drone-Controller-0.1.apk`|Matched Android client, `versionName 0.1`, `versionCode 1`|
-|`SHA256SUMS`|Integrity verification before flashing or upload|
-
-Perform the first migration with propellers removed and avoid `erase-flash` when calibration data must be retained. After migration, run `sys`, `imu`, `flow`, and `ota` to verify both app slots, gyro calibration, ToF, loop timing, and the local device token. Wireless update requires a landed, disarmed vehicle with automatic flight, Offboard, and video stopped. Android and ROS 2 uploaders accept only the application `.bin`, never the merged image. They transmit the token, exact length, and SHA-256. The new slot is confirmed only after parameter storage, IMU, attitude, loop rate, ToF, and MAVLink remain healthy; otherwise the bootloader rolls back.
-
-##### 3.8 CLI Debug Commands
-
-USB serial runs at 115200 bps. The current `cli.ino` is compatible with both UART0 and ESP32-S3 USB Serial/JTAG, and provides the following commonly used commands:
-
-| Command | Output | Typical Use |
-|---|---|---|
-| `help` | All commands | View CLI supported by the current firmware |
-| `p` / `p <name>` / `p <name> <value>` | Parameter list, single parameter, write parameter | Tune PID, estimator, and flow parameters; changes are saved to NVS while motors are stopped |
-| `ps` / `psq` | Euler angles / quaternion | Quickly confirm attitude direction |
-| `imu` | IMU, calibration values, and landed state | Check the sensor and six-face calibration |
-| `rc` | 16 channels, normalized input, mode, and armed state | Check SBUS mapping and the three-position switch |
-| `flow` | ToF, flow velocity, gyro compensation, position, gates, and reject codes | Check the position-estimation chain |
-| `alt` | Altitude engagement, target, ToF height, thrust, and reject code | Check the altitude-control chain |
-| `mot` | Four motor outputs | Check motor mapping and mixer direction |
-| `time` | Loop rate, average/maximum period, and overruns | Check real-time loop load |
-| `ca` / `cr` | Six-face accelerometer calibration / SBUS RC calibration | Use during first assembly or after rebuilding |
-| `wifi` | AP/STA, IP, client, and MAVLink status | Check the network connection |
-| `ap <ssid> <password>` / `sta <ssid> <password>` | Save AP or router-STA settings | Reboot to apply; failed STA startup opens a recovery AP |
-| `arm` / `disarm` | Arm/disarm through serial | Use for propeller-removed debugging |
-| `stab` / `alt` / `pos` | Select one of the three flight modes | Propeller-off serial control-chain checks |
-| `mfr` / `mfl` / `mrr` / `mrl` | Single-motor test | Must remove propellers; used to confirm motor index |
-| `log` / `log dump` | RAM log header / CSV data | Post-flight analysis of attitude, velocity, position, and optical flow |
-| `perf` | Per-stage loop timing | Evaluate the 300 Hz loop and background load while disarmed |
-| `ota` | A/B update state and device token | Local authentication for the companion Android/ROS 2 uploader |
-| `sys` / `reset` / `reboot` | System information / attitude reset / reboot | Inspect and maintain the firmware |
-
-##### 3.9 Android Client and Matching Versions
-
-Android 8.0 (API 26) or newer is required. One configurable aircraft IPv4 address is used for MAVLink, optional video, and OTA. The client provides altitude/position modes, automatic takeoff and landing, dual sticks, diagnostics, and A/B application-image upload.
-
-The operating sequence is: join the `open32drone` Wi-Fi network, wait for MAVLink and ToF readiness, select an assisted mode, arm/take off, then land and confirm disarm. Video replaces the default background only after a fresh MJPEG frame arrives; a stream interruption does not freeze the last frame. Explicit physical SBUS activity takes ordinary control ownership and stops normal phone stick commands, while emergency disarm remains available.
-
-The Minimal Android APK, firmware, and ROS 2 bundle form one matching interface set. Verify `SHA256SUMS` before installation or flashing and do not mix components from different commits. Android and ROS 2 must not control the same aircraft at once; QGC is limited to ground parameter maintenance. The current APK is debug-signed for development and controlled testing, not a product-signed release.
-
-#### 4. Tuning Recommendations
-
-Tune only one class of parameters at a time, and record logs before and after each change.
-
-##### 4.1 How to Use Debug Output
-
-| Stage | Recommended Command | Key Fields | Judgment Criteria |
-|---|---|---|---|
-| Static after power-on | `imu`, `ps` | Accelerometer, rates, and attitude | Output is stable and handheld tilt follows the body axes |
-| RC check | `rc` | Channels, normalized input, mode, armed | Sticks and the three-position switch map correctly |
-| Handheld translation/rotation | `flow` | RawVel, Filtered body, Gyro apparent, Position | Translation signs are correct; compensated velocity stays near zero during pure rotation |
-| Motor mapping | `mfr/mfl/mrr/mrl` | Corresponding motor | All four commands match physical motor positions; remove propellers |
-| Low-altitude STAB | `log dump` | rates, ratesTarget, attitude, motor | Rates and attitude follow targets without persistent motor saturation |
-| ALT_HOLD | `alt`, `log dump` | Target, Alt(TOF), velocity.z, altReject | Height converges around the target captured on entry |
-| POS_HOLD | `flow`, `log dump` | UsingFlow, PosGate, HoldGate, Locked, position.x/y | Position control starts after the gates and lock point engage |
-
-##### 4.2 Basic Attitude Loop
-
-1. Keep the drone in `STAB` mode and first confirm that it does not spin or keep tipping in one direction.
-2. If high-frequency oscillation appears, first reduce `CTL_R_RATE_D` / `CTL_P_RATE_D` or check motor, propeller, and frame vibration.
-3. If attitude response is slow, slightly increase `CTL_R_RATE_P` / `CTL_P_RATE_P`.
-4. If the attitude can self-level but has slow bias, then consider slightly increasing Rate I. Do not tune integral first.
-
-##### 4.3 Altitude Hold
-
-Altitude hold combines hover-thrust feedforward with altitude PID. In assisted modes, the throttle stick is a vertical-speed command centered at 50%. First estimate hover thrust in `STAB` and store it as `ALT_HOVER`; after entering `ALT_HOLD`, center the stick to hold height and move it up/down to shift the altitude target. After ground arming, motors remain at idle until throttle exceeds the takeoff trigger for 0.20 s, then a bounded thrust ramp starts.
-
-| Symptom | First Adjustment |
-|---|---|
-| Insufficient thrust after entering `ALT_HOLD` | Check `ALT_HOVER` and runtime `hoverEstimate`; do not substitute stick bias for feedforward calibration |
-| Height oscillates | Check the ToF surface and reduce `ALT_P` / `ALT_D` if needed |
-| Height response is sluggish | Confirm altitude engagement with `alt`, then adjust `ALT_P` or `ALT_VEL_MAX` slightly |
-| Altitude hold does not engage | Inspect `Reject` and ToF height from `alt` |
-
-##### 4.4 Optical-Flow Direction and Position Hold
-
-The current control XY is not raw pixels. It is relative position estimation after height scaling, gyro compensation, bias subtraction, and gating. When tuning optical flow, distinguish three groups of values:
-
-| Field | Meaning |
-|---|---|
-| `RawVel` in `flow` | Raw axis velocity from the flow module |
-| `Filtered body` | Body velocity after gyro compensation and filtering |
-| `Gyro apparent` | Apparent optical-flow velocity caused by body rotation |
-| `Position X/Y` | Integrated horizontal relative position |
-| `UsingFlow/PosGate/HoldGate/Locked` | Flow usage, estimator gate, and position-control state |
-
-Calibration order:
-
-1. Remove propellers, translate the drone forward/back and left/right, and run `flow` after each direction to confirm velocity signs.
-2. Pitch and roll the drone in place, then run `flow`; `Filtered body` should remain near zero. Adjust `FLOW_GYRO_P/R` and `FLOW_GYRO_DLY` if needed.
-3. Complete STAB and ALT_HOLD checks before trying low-altitude `POS_HOLD`.
-4. Use `flow` for `UsingFlow`, `PosGate`, `HoldGate`, and `Locked`; use `log dump` for the continuous transition.
-5. If position hold diverges, return to `STAB`, check directions and rotational compensation, then tune `POS_HOLD_P` and `POS_VEL_P_X/Y`.
-
-##### 4.5 RAM Log
-
-`log dump` outputs CSV-format data. Current log columns include:
-
-| Category | Fields |
-|---|---|
-| Time | `t` |
-| Angular rate | `rates.x/y/z`, `ratesTarget.x/y/z` |
-| Attitude | `attitude.x/y/z`, `attitudeTarget.x/y/z` |
-| Control position | `position.x/y/z` |
-| Control velocity | `velocity.x/y/z` |
-| Optical-flow chain | `flowRaw.x/y`, `flowComp.x/y`, `flowFilt.x/y`, `flowGyro.x/y` |
-| Position control | `targetPosX/Y`, `targetVel.x/y`, `velError.x/y`, `posRollCmd`, `posPitchCmd` |
-| Gates and diagnostics | `flowAgeMs`, `flowPosGate`, `posHoldGate`, `flowReject`, `posReject`, `altReject`, `actuatorOwner`, `autoPhase`, `posFallback` |
-| Control output | `thrustTarget`, `motor.rl/rr/fr/fl`, `mixerScale`, `posSaturated`, `motorSaturated` |
-
-The RAM log stores roughly the latest 12 seconds at 25 Hz and is exported with `log dump` after disarming; bulk export is blocked in flight. `perf` samples IMU, input, estimation, control, CLI, MAVLink, and housekeeping stage timing once every 16 control cycles. Safety retains link-loss descent and a single sustained-attitude threshold for minimum tip-over motor stop; it performs no collision classification and has no separate incident buffer.
-
-#### 5. Preflight and Staged Acceptance
-
-After a new build, a flight-critical code change, or a sensor replacement, progress in this order:
-
-```mermaid
-flowchart LR
-  BUILD["build and static checks"] --> BENCH["propeller-off checks"]
-  BENCH --> RESTRAINED["restrained low-power tests"]
-  RESTRAINED --> FLIGHT["controlled low-altitude flight"]
-  FLIGHT --> EVIDENCE["parameters · logs · version record"]
-```
-
-| Stage | Required work | Gate to proceed |
-|---|---|---|
-|Software|Build with fixed ESP32 Core/partition settings; run tests and credential checks|Build succeeds and version/parameter sources are known|
-|Propeller-off|Run `sys`, `imu`, `rc`, `flow`; calibrate; test four motors; stop RC/Offboard input|Sensor directions, motor order, rejection logic, and stop paths are correct|
-|Restrained power|Inspect spin-up, takeoff ramp, altitude engagement, position gates, landing, and the sustained-tip threshold|Output is continuous and bounded, takeover works, and no abnormal saturation occurs|
-|Controlled flight|Validate STAB, ALT_HOLD, POS_HOLD, then automatic flight and external control|Attitude is stable, height/position corrections have the right sign, and failures degrade as intended|
-
-Before flight, check frame orientation, motor/propeller installation, controller mounting, floor texture and illumination, ToF reflection, and area isolation. Hold the aircraft still at boot until `imu` reports completed gyro calibration. Use `rc` to check sticks and the three-position switch, and `flow` to inspect ToF and horizontal flow separately. The first powered flight should be a brief low-altitude STAB test; proceed to altitude and position hold only after manual recovery is demonstrated. Change one factor per run and record firmware, hardware, parameters, environment, and RAM logs.
-
-#### 6. Troubleshooting Table
-
-| Symptom | Possible Cause | Solution |
-|---|---|---|
-| Flips immediately after takeoff | Propeller direction is wrong | Check X layout: diagonal motors spin in the same direction, adjacent motors spin in opposite directions |
-| STAB is stable but XY drifts | Not in POS_HOLD or optical-flow gating is not open | Use `flow` to inspect `UsingFlow/PosGate/HoldGate/Locked` and reject codes |
-| Position hold corrects in the wrong direction | Optical-flow X/Y direction or angular-rate compensation is wrong | Translate and rotate the drone by hand, then inspect RawVel and Filtered body with `flow` |
-| Large altitude fluctuation | ToF jitter, unsuitable reflecting surface, or excessive altitude gain | Run `alt` and inspect `flowHeight`, `position.z`, and `velocity.z` in the log |
-| Hover oscillates | Position/velocity gains are too high | Reduce `POS_HOLD_P` or `POS_VEL_P_X/Y` |
-| Motor output is obviously biased to one side | Mixer direction, motor order, or attitude-estimation direction is wrong | Remove propellers, run all four single-motor commands, and inspect corrections in the log |
-| Attitude loop oscillates | Frame vibration or excessive rate-loop D gain | Inspect the frame and propellers, then analyze rates and motor output with `log dump` |
-| Arming fails | RC signal is abnormal or throttle is not at zero | Check SBUS wiring and use serial `rc` to inspect channel values |
-| Wi-Fi cannot connect | Incorrect SSID/password settings or unstable supply | Connect to default AP `open32drone`; use `ap <ssid> <password>` and reboot to change credentials |
-| MAVROS cannot connect | Host is not on the flight-controller AP, or IP/UDP port is wrong | Confirm address 192.168.4.1 and port 14550, then inspect status with `wifi` |
-
-## 3. Additional Content
-
-### Reference Links
-
-- Original Flix project: [github.com/okalachev/flix](https://github.com/okalachev/flix)
-
-- MAVLink protocol documentation: [mavlink.io](https://mavlink.io)
-
-- QGroundControl: [qgroundcontrol.com](https://qgroundcontrol.com)
-
-- ESP32-S3 technical manual: [espressif.com](https://www.espressif.com)
-
-- PX4 development guide for PID tuning: [docs.px4.io](https://docs.px4.io)
-
-- Crazyflie technical documentation, Lee controller reference: [bitcraze.io](https://www.bitcraze.io)
+After changing sensors, frame, motors, or flight-critical code, repeat build checks, propeller-off validation, controlled low-altitude flight, and log review. Use Chapter 4's calibrated SBUS or Android first-flight route. Build ROS and policy experiments on repeatable basic flight.
