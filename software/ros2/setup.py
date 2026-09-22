@@ -21,7 +21,7 @@ setup(
     maintainer='Open32Drone',
     maintainer_email='dev@open32drone.local',
     description='Minimal namespaced Open32Drone MAVROS control and telemetry bridge',
-    url='https://github.com/osrbot/osrdrone',
+    url='https://github.com/npu-ius-lab/open32drone',
     license='MIT',
     entry_points={
         'console_scripts': [

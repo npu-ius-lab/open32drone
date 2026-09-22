@@ -33,10 +33,8 @@
   "control_dt_s": 0.02,
   "physics_dt_s": 0.005,
   "evidence": {
-    "mass_and_propeller": "User confirmed 81 g and 60 mm for historical hover references.",
-    "primary_logs": "Use voltage-era log_ca and log004 as approximate hover anchors. User considers these logs accurate.",
-    "older_logs": "Before voltage logging: user considers unreliable; rough qualitative references only, excluded from parameter fitting and acceptance truth.",
-    "thrust": "Linear extrapolation from log_ca hover 0.474; not a measured maximum.",
+    "mass_and_propeller": "Reference teaching configuration: 81 g and 60 mm, not a universal airframe calibration.",
+    "thrust": "Approximate linear extrapolation at a nominal hover command of 0.474; not a measured maximum.",
     "inertia": "Rounded CAD-based aggregate estimate, unmeasured.",
     "voltage_scaling": "Engineering approximation: full-command force proportional to voltage over the training range, not an identified curve.",
     "motor_response_yaw_drag": "Engineering initial values, not identified from the low-rate flight logs.",

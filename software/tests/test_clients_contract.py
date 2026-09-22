@@ -246,6 +246,8 @@ class ClientContractTests(unittest.TestCase):
             self.assertIn(argument, launch)
         self.assertIn("send_tf: false", plugin)
         self.assertIn("/**/distance_sensor:", plugin)
+        self.assertNotIn('name="mavros"', launch)
+        self.assertIn('remappings=[("tof", "distance_sensor/tof")]', launch)
         self.assertIn('"local_position/tf/send": False', launch)
         self.assertIn("Value: odom", rviz)
         self.assertNotIn("Value: /odom", rviz)
@@ -284,7 +286,7 @@ class ClientContractTests(unittest.TestCase):
         self.assertIn('client = self.trigger_clients["rc_stop"]', manager)
         self.assertGreaterEqual(manager.count("RC stop before landing failed"), 2)
         self.assertIn("target_height = launch_height + parsed.height", flight)
-        self.assertIn("hover altitude left tolerance for 1.0 s", flight)
+        self.assertIn("hover position or speed left tolerance for 1.0 s", flight)
         self.assertIn("ExtendedState.LANDED_STATE_ON_GROUND", flight)
         self.assertIn("qos_profile_sensor_data", flight)
         self.assertIn('self.command("rc stop")', cli)
@@ -316,7 +318,8 @@ class ClientContractTests(unittest.TestCase):
         self.assertIn("bench_test =", setup)
         self.assertIn("flight_test =", setup)
         self.assertLess(len(bench.read_text(encoding="utf-8").splitlines()), 180)
-        self.assertLess(len(flight.read_text(encoding="utf-8").splitlines()), 260)
+        # One entry point now covers hover and feedback-gated cross patterns.
+        self.assertLess(len(flight.read_text(encoding="utf-8").splitlines()), 350)
         self.assertNotIn("acceptance_test", setup)
 
 

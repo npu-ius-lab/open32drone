@@ -130,7 +130,9 @@ class OffboardControl(Node):
         if self.phase != "IDLE" and (not message.connected or not message.armed):
             self.get_logger().warning("Offboard stopped because FCU disconnected or disarmed")
             self.phase = "IDLE"
-            self.mode_request_pending = False
+        elif self.phase == "ACTIVE" and message.mode not in ("AUTO", "CMODE(3)"):
+            self.get_logger().warning("Flight mode left AUTO; stopping ROS Offboard ownership")
+            self.phase = "IDLE"
 
     def _pose_callback(self, message):
         values = (message.pose.position.x, message.pose.position.y, message.pose.position.z)
@@ -241,6 +243,8 @@ class OffboardControl(Node):
             return True, f"offboard already {self.phase.lower()}"
         if self.phase != "IDLE":
             return False, f"offboard is {self.phase.lower()}"
+        if self.mode_request_pending:
+            return False, "previous mode command is still awaiting its ACK"
         if not self.state.connected or not self.state.armed:
             return False, "FCU must be connected and armed"
         if not self._pose_fresh():
@@ -292,7 +296,9 @@ class OffboardControl(Node):
         request = CommandLong.Request()
         request.broadcast = False
         request.command = MAV_CMD_DO_SET_MODE
-        request.confirmation = 0
+        # MAVROS skips ACK waiting for GENERIC autopilots when confirmation=0.
+        # Nonzero opts into its real COMMAND_ACK transaction (not a mode flag).
+        request.confirmation = 1
         request.param2 = float(mode)
         self.mode_request_pending = True
         future = self.command_client.call_async(request)
@@ -300,6 +306,15 @@ class OffboardControl(Node):
 
     def _mode_response(self, future, purpose):
         self.mode_request_pending = False
+        expected_phase = {"prepare": "PREPARING", "activate": "WARMUP",
+                          "stop": "STOPPING", "watchdog": "STOPPING"}
+        if self.phase != expected_phase[purpose]:
+            # A pose timeout or ownership change may have stopped this attempt
+            # while MAVROS was waiting for the aircraft's ACK.
+            return
+        if not self.state.connected or not self.state.armed:
+            self.phase = "IDLE"
+            return
         try:
             result = future.result()
             accepted = bool(result.success)
@@ -322,8 +337,9 @@ class OffboardControl(Node):
 
         if purpose == "activate":
             if accepted:
-                self.phase = "ACTIVE"
-                self.get_logger().info("Offboard AUTO accepted; setpoint stream is active")
+                self.phase = "CONFIRMING"
+                self.activation_deadline = now + float(self.get_parameter("activation_timeout").value)
+                self.get_logger().info("AUTO acknowledged; waiting for flight-mode confirmation")
             elif now < self.activation_deadline:
                 self.phase = "WARMUP"
                 self.next_auto_request_at = now + 0.25
@@ -398,6 +414,15 @@ class OffboardControl(Node):
             self.get_logger().error("Local position timed out; stopping stream for firmware fallback")
             self.phase = "IDLE"
             return
+
+        if self.phase == "CONFIRMING":
+            if self.state.mode in ("AUTO", "CMODE(3)"):
+                self.phase = "ACTIVE"
+                self.get_logger().info("Flight mode confirmed AUTO; Offboard stream is active")
+            elif now >= self.activation_deadline:
+                self.get_logger().error("AUTO mode confirmation timed out; requesting Position Hold")
+                self.phase = "STOPPING"
+                self._request_mode(MODE_POSITION_HOLD, "stop")
 
         # Until an operator command arrives, refresh the warmup target from the
         # latest XY feedback so switching to AUTO cannot pull toward an old point.

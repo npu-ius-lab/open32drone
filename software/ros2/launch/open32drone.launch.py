@@ -67,9 +67,11 @@ def generate_launch_description():
             package="mavros",
             executable="mavros_node",
             namespace=mavros_namespace,
-            name="mavros",
+            # A global __node remap also renames MAVROS plugin nodes, breaking
+            # their private topics and node-specific parameter selectors.
             output="screen",
             parameters=[mavros_parameters, plugin_config],
+            remappings=[("tof", "distance_sensor/tof")],
         ),
         Node(
             package="open32drone_driver",

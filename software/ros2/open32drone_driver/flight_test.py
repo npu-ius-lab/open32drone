@@ -1,11 +1,13 @@
-"""One supervised takeoff, hover, and landing acceptance flight."""
+"""One supervised hover or feedback-gated cross acceptance flight."""
 
 import argparse
 import json
 import math
+from pathlib import Path
 import time
 
 import rclpy
+from geometry_msgs.msg import PoseStamped
 from mavros_msgs.msg import ExtendedState, State
 from nav_msgs.msg import Odometry
 from rclpy.node import Node
@@ -17,7 +19,8 @@ from rclpy.qos import (
 )
 from std_msgs.msg import String
 
-from .names import DEFAULT_ROBOT_NAME, robot_name
+from .names import DEFAULT_ROBOT_NAME, frame_prefix, robot_name
+from .control_math import StableDurationGate, position_is_stable
 
 
 class FlightTest(Node):
@@ -36,6 +39,12 @@ class FlightTest(Node):
         self.extended_state_received_at = 0.0
         self.position = None
         self.position_received_at = 0.0
+        self.speed = None
+        self.yaw = 0.0
+        self.phase = "PREFLIGHT"
+        self.events = []
+        self.offboard = ""
+        self.require_offboard = False
         self.command_results = {}
         self.samples = []
         self.command_publisher = self.create_publisher(
@@ -49,6 +58,8 @@ class FlightTest(Node):
             qos_profile_sensor_data,
         )
         self.create_subscription(Odometry, "odom", self._odom, reliable)
+        self.goal_publisher = self.create_publisher(PoseStamped, "goal_pose", reliable)
+        self.create_subscription(String, "offboard/status", self._offboard, reliable)
         self.create_subscription(
             String, "command/result", self._result, reliable
         )
@@ -64,11 +75,81 @@ class FlightTest(Node):
     def _odom(self, message):
         point = message.pose.pose.position
         values = (point.x, point.y, point.z)
-        if not all(math.isfinite(value) for value in values):
+        q = message.pose.pose.orientation
+        quaternion = (q.x, q.y, q.z, q.w)
+        if (not all(math.isfinite(value) for value in (*values, *quaternion))
+                or abs(sum(value*value for value in quaternion)-1.0) > 0.05):
             return
         self.position = values
         self.position_received_at = time.monotonic()
-        self.samples.append((time.monotonic(), *values))
+        self.yaw = math.atan2(2*(q.w*q.z+q.x*q.y), 1-2*(q.y*q.y+q.z*q.z))
+        # Position differences stay in the same frame as the tested goals.
+        # Do not mistake an odom child-frame twist for world vertical speed.
+        previous = next((s for s in reversed(self.samples)
+                         if self.position_received_at-s[0] >= 0.3), None)
+        if previous is not None:
+            dt = self.position_received_at-previous[0]
+            self.speed = tuple((a-b)/dt for a, b in zip(values, previous[1:4]))
+        self.samples.append((self.position_received_at, *values, self.phase, *quaternion))
+
+    def _offboard(self, message):
+        self.offboard = message.data
+
+    def mark(self, phase, goal=None):
+        self.phase = phase
+        self.events.append({"phase": phase, "time": time.monotonic(), "goal": goal})
+        print(phase, flush=True)
+
+    def check_live(self):
+        now = time.monotonic()
+        if not self.state.connected or now-self.state_received_at > 1.0:
+            raise RuntimeError("FCU state disconnected or stale")
+        if now-self.position_received_at > 0.5:
+            raise RuntimeError("local position became stale")
+        if not self.state.armed:
+            raise RuntimeError("aircraft disarmed unexpectedly")
+        if self.require_offboard and ("phase=ACTIVE" not in self.offboard
+                                      or self.state.mode not in ("AUTO", "CMODE(3)")):
+            raise RuntimeError("Offboard ownership lost during position test")
+
+    def stable_at(self, goal, tolerance):
+        if self.speed is None:
+            return False
+        return position_is_stable(
+            math.hypot(self.position[0]-goal[0], self.position[1]-goal[1]),
+            abs(self.position[2]-goal[2]), math.hypot(*self.speed[:2]),
+            self.speed[2], tolerance, 0.08)
+
+    def wait_stable(self, goal, tolerance, publish=None):
+        gate = StableDurationGate(1.0)
+        deadline = time.monotonic()+20.0
+        next_publish = 0.0
+        while time.monotonic() < deadline:
+            rclpy.spin_once(self, timeout_sec=0.05)
+            self.check_live()
+            now = time.monotonic()
+            if publish is not None and now >= next_publish:
+                publish()
+                next_publish = now+0.5
+            if gate.update(now, self.stable_at(goal, tolerance)):
+                return
+        raise RuntimeError(f"target not reached and settled: {goal}")
+
+    def hover(self, goal, duration, tolerance):
+        deadline = time.monotonic()+duration
+        outside = StableDurationGate(1.0)
+        while time.monotonic() < deadline:
+            rclpy.spin_once(self, timeout_sec=0.05)
+            self.check_live()
+            if outside.update(time.monotonic(), not self.stable_at(goal, tolerance)):
+                raise RuntimeError("hover position or speed left tolerance for 1.0 s")
+
+    def landed(self):
+        now = time.monotonic()
+        return (self.state.connected and not self.state.armed
+                and now-self.state_received_at < 1.0
+                and now-self.extended_state_received_at < 1.0
+                and self.extended_state.landed_state == ExtendedState.LANDED_STATE_ON_GROUND)
 
     def _result(self, message):
         try:
@@ -90,9 +171,13 @@ class FlightTest(Node):
     def wait_live(self):
         self.spin_until(
             lambda: self.command_publisher.get_subscription_count() > 0
+            and self.count_publishers("command/result") > 0
             and self.state_received_at > 0.0
+            and time.monotonic() - self.state_received_at < 1.0
             and self.extended_state_received_at > 0.0
-            and self.position_received_at > 0.0,
+            and time.monotonic() - self.extended_state_received_at < 1.0
+            and self.position_received_at > 0.0
+            and time.monotonic() - self.position_received_at < 0.5,
             8.0,
             "driver discovery and telemetry",
         )
@@ -100,6 +185,10 @@ class FlightTest(Node):
             raise RuntimeError("FCU is not connected")
         if self.state.armed:
             raise RuntimeError("aircraft is already armed")
+        # A bag recorder also subscribes to command. A subscriber count alone
+        # does not prove the command handler is ready. Verify a read-only round
+        # trip before issuing the single, non-retried takeoff command.
+        self.command("status")
 
     def command(self, text, timeout=5.0):
         self.command_results.pop(text, None)
@@ -139,7 +228,12 @@ def parse_args(args=None):
     parser.add_argument("--robot-name", default=DEFAULT_ROBOT_NAME)
     parser.add_argument("--height", type=float, default=0.65)
     parser.add_argument("--hover", type=float, default=5.0)
-    parser.add_argument("--height-tolerance", type=float, default=0.18)
+    parser.add_argument("--height-tolerance", type=float, default=0.10,
+                        help="arrival/hover position tolerance in m (XY and Z)")
+    parser.add_argument("--pattern", choices=("hover", "cross"), default="hover")
+    parser.add_argument("--distance", type=float, default=0.4)
+    parser.add_argument("--frame-prefix", default=None)
+    parser.add_argument("--output", help="new JSON file for phase events and telemetry")
     return parser.parse_args(args)
 
 
@@ -151,74 +245,94 @@ def main(args=None):
         raise SystemExit("--hover must be within [2, 60] seconds")
     if not math.isfinite(parsed.height_tolerance) or not 0.05 <= parsed.height_tolerance <= 0.50:
         raise SystemExit("--height-tolerance must be within [0.05, 0.50] m")
+    if not math.isfinite(parsed.distance) or not 0.1 <= parsed.distance <= 0.7:
+        raise SystemExit("--distance must be within [0.1, 0.7] m")
+    parsed.robot_name = robot_name(parsed.robot_name)
+    goal_frame = f"{frame_prefix(parsed.frame_prefix, parsed.robot_name)}/odom"
+    report_file = None
+    if parsed.output:
+        path = Path(parsed.output)
+        path.parent.mkdir(parents=True, exist_ok=True)
+        report_file = path.open("x", encoding="utf-8")  # Fail before arming if unwritable/existing.
 
     rclpy.init(args=[])
     node = FlightTest(parsed.robot_name)
     started_at = time.monotonic()
+    wall_started_at = time.time()
     launch_height = 0.0
     test_error = None
+    takeoff_attempted = False
+    landing_attempted = False
     try:
         node.wait_live()
         launch_height = node.position[2]
         target_height = launch_height + parsed.height
-        print(f"TAKEOFF: target={parsed.height:.2f} m")
+        if target_height > 5.8:
+            raise RuntimeError("absolute target height exceeds 5.8 m")
+        home = (*node.position[:2], target_height)
+        node.mark("TAKEOFF", home)
+        takeoff_attempted = True
         node.command(f"takeoff {parsed.height:g}")
         node.spin_until(lambda: node.state.armed, 5.0, "armed state")
-        node.spin_until(
-            lambda: node.position is not None
-            and abs(node.position[2] - target_height) <= parsed.height_tolerance,
-            15.0,
-            "target height",
-        )
-        print(f"HOVER: {parsed.hover:.1f} s")
-        hover_deadline = time.monotonic() + parsed.hover
-        altitude_outside_since = None
-        while rclpy.ok() and time.monotonic() < hover_deadline:
-            rclpy.spin_once(node, timeout_sec=0.05)
-            now = time.monotonic()
-            if not node.state.connected:
-                raise RuntimeError("FCU disconnected during hover")
-            if not node.state.armed:
-                raise RuntimeError("aircraft disarmed during hover")
-            if node.position is None or now - node.position_received_at > 1.0:
-                raise RuntimeError("local position became stale during hover")
-            if abs(node.position[2] - target_height) > parsed.height_tolerance:
-                if altitude_outside_since is None:
-                    altitude_outside_since = now
-                elif now - altitude_outside_since >= 1.0:
-                    raise RuntimeError(
-                        "hover altitude left tolerance for 1.0 s "
-                        f"(z={node.position[2]:.2f}, target={target_height:.2f})"
-                    )
-            else:
-                altitude_outside_since = None
-        print("LAND")
+        node.wait_stable(home, parsed.height_tolerance)
+        node.mark("INITIAL_HOVER", home)
+        node.hover(home, parsed.hover, parsed.height_tolerance)
+        if parsed.pattern == "cross":
+            yaw = node.yaw
+            node.mark("OFFBOARD_START")
+            node.command("rc stop")
+            node.command("offboard start")
+            node.spin_until(lambda: "phase=ACTIVE" in node.offboard
+                            and node.state.mode in ("AUTO", "CMODE(3)"), 6, "confirmed AUTO")
+            node.require_offboard = True
+            for name, forward, left in (("FORWARD", parsed.distance, 0), ("BACKWARD", 0, 0),
+                                        ("LEFT", 0, parsed.distance), ("RIGHT", 0, 0)):
+                goal = (home[0]+math.cos(yaw)*forward-math.sin(yaw)*left,
+                        home[1]+math.sin(yaw)*forward+math.cos(yaw)*left, home[2])
+                message = PoseStamped()
+                message.header.frame_id = goal_frame
+                message.pose.position.x, message.pose.position.y, message.pose.position.z = goal
+                message.pose.orientation.w = 1.0
+                def publish_goal():
+                    message.header.stamp = node.get_clock().now().to_msg()
+                    node.goal_publisher.publish(message)
+                node.mark(name, goal)
+                node.wait_stable(goal, parsed.height_tolerance, publish_goal)
+                node.mark(name+"_SETTLED", goal)
+                node.hover(goal, 1.0, parsed.height_tolerance)
+            node.mark("FINAL_HOVER", home)
+            node.hover(home, parsed.hover, parsed.height_tolerance)
+        node.mark("LAND")
+        landing_attempted = True
         node.command("land")
-        node.spin_until(
-            lambda: not node.state.armed
-            and node.extended_state.landed_state
-            == ExtendedState.LANDED_STATE_ON_GROUND,
-            25.0,
-            "landed and disarmed state",
-        )
-    except (RuntimeError, KeyboardInterrupt) as error:
+        node.spin_until(node.landed, 25.0, "landed and disarmed state")
+    except (Exception, KeyboardInterrupt) as error:
         test_error = str(error)
-        if node.state.connected and node.state.armed:
+        if takeoff_attempted and not landing_attempted and node.state.connected:
             print("RECOVERY: requesting land once")
             try:
                 node.command("land", timeout=4.0)
-                node.spin_until(lambda: not node.state.armed, 20.0, "recovery landing")
-            except RuntimeError as recovery_error:
+                node.spin_until(node.landed, 25.0, "recovery landing")
+            except Exception as recovery_error:
                 test_error += f"; recovery failed: {recovery_error}"
     finally:
-        print(json.dumps(node.summary(parsed.height, launch_height, started_at), indent=2))
+        node.mark("FINISH")
+        report = {"error": test_error, "pattern": parsed.pattern, "events": node.events,
+                  "clock": {"monotonic_start": started_at, "unix_start": wall_started_at},
+                  "sample_fields": ["monotonic_s", "x", "y", "z", "phase", "qx", "qy", "qz", "qw"],
+                  "final_armed": node.state.armed, "final_landed": node.landed(),
+                  "summary": node.summary(parsed.height, launch_height, started_at)}
+        print(json.dumps(report, indent=2))
+        if report_file:
+            json.dump({**report, "samples": node.samples}, report_file, indent=2)
+            report_file.close()
         node.destroy_node()
         rclpy.try_shutdown()
 
     if test_error:
         print("FAIL: " + test_error)
         return 1
-    print("PASS: takeoff, target-height capture, hover, landing, and disarm")
+    print(f"PASS: {parsed.pattern} sequence reached and settled, landed and disarmed")
     return 0
 
 

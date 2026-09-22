@@ -1,0 +1,68 @@
+# Arduino / PlatformIO
+.pio/
+.pioenvs/
+.piolibdeps/
+build/
+*.elf
+*.bin
+*.hex
+output/
+!software/releases/**/*.bin
+
+# Python / ROS2
+__pycache__/
+*.pyc
+install/
+log/
+colcon_*
+
+# IDE / OS
+.vscode/
+.idea/
+.DS_Store
+Thumbs.db
+node_modules/
+docs/.vitepress/cache/
+docs/.vitepress/dist/
+docs/.vitepress/.temp/
+
+# Android controller
+software/android/.gradle/
+software/android/local.properties
+software/android/build/
+software/android/app/build/
+
+# 日志
+*.log
+
+# Local build credentials; injected into private binaries only
+/secrets/
+
+# Local environments, captures and personal configuration (not release content)
+.venv/
+.env
+.env.*
+!.env.example
+/work/
+/artifacts/
+/backups/
+/reference/
+*.bag
+*.db3
+*.mcap
+*.jks
+*.keystore
+*.key
+*.pem
+
+# Machine-local assistant rules are not project documentation
+AGENTS.md
+AGENT.md
+CLAUDE.md
+GEMINI.md
+CODEX.md
+.claude/
+.codex/
+.cursor/
+.cursorrules
+.github/copilot-instructions.md

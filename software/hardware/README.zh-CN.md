@@ -4,20 +4,26 @@
 
 本目录保存标准 Open32Drone 机架的打印/CAD 文件和一台飞机所需的机械件规格。
 完整电子件、刷写、校准和首飞流程仍以
-[快速开始](../docs/GETTING_STARTED.zh-CN.md)为准。
+[快速开始](../../docs/guide/04-firmware-flight.md)为准。
 
 CAD 零件分组、传感器坐标、质量分配和 Gazebo/Isaac 模型准备，见
-[URDF / USD 模型导出](../docs/SIMULATION_MODEL.zh-CN.md)。该指南确定导出结构，
-并记录本地机械模型修正版及 MuJoCo 检查；电机、虚拟传感器和飞行闭环仍需后续接入。
+[URDF / USD 模型导出](../../docs/guide/07-rl.md)。该指南确定导出结构，
+完整 URDF/USD 场景及 Gazebo 飞行集成没有随本下载提供。
 
 ## 机架文件
+
+- [MakerWorld 机架打印](https://makerworld.com.cn/zh/models/2922108-open32drone-wu-ren-ji-8520kong-xin-bei-ji-jia-ros2#profileId-3425842)：在 Bambu Studio 中打开打印配置。页面配置为 0.2 mm 层高、6 层墙、25% 填充，切片前核对实际打印机与材料。
+- [嘉立创开源硬件 PCB 工程](https://oshwhub.com/fanchewang/open32drone)：打开或克隆设计图，选择配套硬件版本。PCB 资料不在仓库重复打包；以下机械 BOM 不等于电子 BOM。
+
+各类资源许可分别见[第三方声明](../../docs/project/third-party.zh-CN.md)。
 
 | 文件 | 用途 | 单位与检查 |
 |---|---|---|
 | [`3d-model/open32drone-frame.3mf`](3d-model/open32drone-frame.3mf) | 推荐的打印工程文件，包含已排版的机架组件 | 3MF 明确使用毫米；主机架网格外形约 `103.3 × 103.3 mm`，导入后不要缩放 |
 | [`3d-model/open32drone-frame.stp`](3d-model/open32drone-frame.stp) | 修改结构和跨 CAD 软件交换 | STEP AP214 文件内部长度单位为厘米；正常 CAD 会自动换算，导入后仍应以约 `103.3 mm` 的主机架外形复核比例 |
 
-3MF 带有 Bambu Studio 工程元数据。打印前仍应核对本机喷嘴、材料、层高、支撑和
+3MF 保留 Bambu Studio 打印设置，已移除账号元数据；STEP 文件头路径已规范化，
+这两项不改变几何。打印前仍应核对本机喷嘴、材料、层高、支撑和
 壁厚设置；切片软件能够打开文件，不等于该打印参数已经适用于所有机器和材料。
 
 使用下列命令核对文件完整性：
@@ -29,17 +35,17 @@ shasum -a 256 -c SHA256SUMS
 
 ## 一台飞机的机械 BOM
 
+模块、线材、电池配件和采购链接统一见[一台飞机的采购清单](../../docs/guide/03-hardware.md#purchasing)。下表用于核对机械尺寸，不代替 PCB 电子 BOM。
+
 | 零件 | 规格 | 数量 | 采购/装配要求 |
 |---|---|---:|---|
 | 打印机架组件 | 上述 3MF/STEP 对应结构 | 1 套 | 不缩放打印；装配后机架无扭曲 |
-| PWA 自攻螺丝 | 供应商标注 `1.4 × 4 × 4 mm` | 12 | 按图示规格采购；更换头径或长度前先检查孔位、压板和电路板间隙 |
+| 固定螺丝 | `1 × 4 × 4 mm` | 10 | 按采购清单选择规格，安装后不压弯电路板、不穿出机架 |
 | 8520 空心杯电机 | `8 × 20 mm`，轴径 `1 mm`，MX1.25 端子，线长至少 `100 mm` | 4 | 四个电机电气/机械规格一致，转轴无弯曲，线材无拉力 |
 | 电机固定橡胶圈 | `C × E = Ø8 × 2 mm`；开孔 `B=10 mm`；卡槽 `E=2 mm`；总厚 `D=6 mm`；外径 `A=15 mm` | 4 | 建议 `2` 黑、`2` 白，固定一种颜色布局，便于辨认机头或电机位置 |
-| 桨叶 | 支持 `60 mm` 和 `65 mm`，桨孔匹配 `1 mm` 电机轴 | 4 | 两种直径均可选；一架飞机只能使用同一直径的一套桨，配对安装 `2` 个 CW 和 `2` 个 CCW，不能混装 60/65 mm |
+| 桨叶 | 采购规格 `60 mm` | 4 | 配对安装 `2` 个 CW 和 `2` 个 CCW，一架飞机使用同一直径 |
 
-螺丝和橡胶圈的采购参考图：
-
-![PWA 1.4 × 4 × 4 mm screws, 12 pieces](assets/pwa-1.4x4x4-screws-12pcs.png)
+橡胶圈尺寸参考图：
 
 ![Ø8 × 2 mm motor grommet dimensions](assets/motor-grommet-8x2.png)
 

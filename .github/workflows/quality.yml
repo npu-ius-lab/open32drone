@@ -1,0 +1,80 @@
+name: Quality checks
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  source-contracts:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+      - name: Compile ROS 2 Python sources
+        run: python -m compileall -q software/ros2
+      - name: Run repository source contracts
+        run: python -m unittest discover -s software/tests -v
+      - name: Reject whitespace errors
+        run: git show --check --oneline --no-renames HEAD
+
+  firmware-build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install pinned toolchain and libraries
+        run: |
+          arduino-cli config init
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32@3.3.6 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli lib install "FlixPeriph@1.10.4" "MAVLink@2.0.25"
+      - name: Compile ESP32-S3 firmware
+        run: |
+          arduino-cli compile \
+            --clean \
+            --fqbn esp32:esp32:XIAO_ESP32S3:PSRAM=opi,PartitionScheme=default_8MB,FlashMode=dio \
+            --build-property "compiler.c.extra_flags=-ffile-prefix-map=${HOME}=/build" \
+            --build-property "compiler.cpp.extra_flags=-ffile-prefix-map=${HOME}=/build" \
+            --output-dir /tmp/open32drone-firmware \
+            software/firmware
+          source_id="$(sed -n 's/^#define OPEN32DRONE_FIRMWARE_SOURCE_SHA256 "\([0-9a-f]\{64\}\)"$/\1/p' software/firmware/source_identity.h)"
+          test "${#source_id}" -eq 64
+          grep -aFq "$source_id" /tmp/open32drone-firmware/firmware.ino.bin
+          nm_tool="$(find "$HOME/.arduino15/packages/esp32/tools" -type f -name xtensa-esp32s3-elf-nm | head -n 1)"
+          test -x "$nm_tool"
+          "$nm_tool" /tmp/open32drone-firmware/firmware.ino.elf | grep -Eq ' T verifyRollbackLater$'
+          part_tool="$(find "$HOME/.arduino15/packages/esp32/hardware/esp32/3.3.6/tools" -name gen_esp32part.py | head -n 1)"
+          python3 "$part_tool" /tmp/open32drone-firmware/firmware.ino.partitions.bin | grep -q 'app1,app,ota_1'
+      - name: Compile alternate IMU backends
+        run: |
+          for backend in OPEN32DRONE_IMU_ICM20948 OPEN32DRONE_IMU_MPU6050; do
+            arduino-cli compile \
+              --clean \
+              --fqbn esp32:esp32:XIAO_ESP32S3:PSRAM=opi,PartitionScheme=default_8MB,FlashMode=dio \
+              --build-property "compiler.cpp.extra_flags=-DOPEN32DRONE_IMU_BACKEND=${backend}" \
+              --output-dir "/tmp/open32drone-firmware-${backend}" \
+              software/firmware
+          done
+
+  android-controller:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+          cache: gradle
+          cache-dependency-path: software/android/**/*.gradle*
+      - uses: android-actions/setup-android@v3
+        with:
+          packages: platform-tools
+      - name: Install Android SDK 35
+        run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
+      - name: Test, lint, and build the dedicated controller
+        working-directory: software/android
+        run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug

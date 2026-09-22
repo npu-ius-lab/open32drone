@@ -32,6 +32,7 @@ class ControlCLI(Node):
         )
         self.command_result = None
         self.status = {}
+        self.status_received_at = {}
         self.command_publisher = self.create_publisher(
             String, "command", reliable
         )
@@ -65,6 +66,7 @@ class ControlCLI(Node):
 
     def _status(self, name, message):
         self.status[name] = message.data
+        self.status_received_at[name] = time.monotonic()
 
     def command(self, text, timeout=10.0):
         self.command_result = None
@@ -118,13 +120,26 @@ class ControlCLI(Node):
         )
         return self.command("rc start") == 0
 
-    def publish_repeated(self, publisher, message, duration, stamp_header=False):
+    def publish_repeated(self, publisher, message, duration, stamp_header=False, check=None):
         deadline = time.monotonic() + duration
+        next_publish = time.monotonic()
         while rclpy.ok() and time.monotonic() < deadline:
-            if stamp_header:
-                message.header.stamp = self.get_clock().now().to_msg()
-            publisher.publish(message)
-            rclpy.spin_once(self, timeout_sec=0.05)
+            now = time.monotonic()
+            if check:
+                check()
+            if now >= next_publish:
+                if stamp_header:
+                    message.header.stamp = self.get_clock().now().to_msg()
+                publisher.publish(message)
+                next_publish = now + 0.05
+            rclpy.spin_once(self, timeout_sec=max(0.0, min(next_publish, deadline)-time.monotonic()))
+
+    def check_velocity_control(self):
+        status = self.status.get("offboard", "")
+        if (time.monotonic()-self.status_received_at.get("offboard", 0) > 1.0
+                or "phase=ACTIVE" not in status or "connected=True" not in status
+                or "armed=True" not in status):
+            raise RuntimeError("Offboard no longer active or status stale; velocity test failed")
 
     def velocity(self, x, y, z, yaw_rate, duration):
         if not _finite((x, y, z, yaw_rate, duration)) or duration <= 0.0:
@@ -134,8 +149,13 @@ class ControlCLI(Node):
         message.linear.y = y
         message.linear.z = z
         message.angular.z = yaw_rate
-        self.publish_repeated(self.velocity_publisher, message, duration)
-        self.publish_repeated(self.velocity_publisher, Twist(), 0.5)
+        try:
+            self.publish_repeated(self.velocity_publisher, message, duration,
+                                  check=self.check_velocity_control)
+            self.publish_repeated(self.velocity_publisher, Twist(), 0.5,
+                                  check=self.check_velocity_control)
+        finally:
+            self.velocity_publisher.publish(Twist())
 
     def position(self, x, y, z):
         if not _finite((x, y, z)):
@@ -240,7 +260,11 @@ def main(args=None):
         elif parsed.action == "emergency-stop":
             result = node.command("emergency_stop")
         elif parsed.action == "takeoff":
-            result = node.command(f"takeoff {parsed.height:g}")
+            # Prove the handler/reply path, not just discovery of a recorder.
+            # Never retry a takeoff to compensate for missing discovery/ACKs.
+            result = node.command("status")
+            if result == 0:
+                result = node.command(f"takeoff {parsed.height:g}")
         elif parsed.action == "mode":
             result = node.command(f"mode {parsed.name}")
         elif parsed.action == "offboard":

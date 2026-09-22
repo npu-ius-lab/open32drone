@@ -249,7 +249,8 @@ class FlightManager(Node):
         request = CommandLong.Request()
         request.broadcast = False
         request.command = command
-        request.confirmation = 0
+        # Require real FCU ACKs: MAVROS otherwise reports send-only success for GENERIC.
+        request.confirmation = 1
         params = params or {}
         for index in range(1, 8):
             setattr(request, f"param{index}", float(params.get(index, 0.0)))
@@ -333,7 +334,8 @@ class FlightManager(Node):
         request = CommandLong.Request()
         request.broadcast = False
         request.command = command
-        request.confirmation = 0
+        # Same ACK contract for services as for the text-command topic.
+        request.confirmation = 1
         params = params or {}
         for index in range(1, 8):
             setattr(request, f"param{index}", float(params.get(index, 0.0)))

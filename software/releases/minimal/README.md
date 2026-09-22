@@ -1,92 +1,63 @@
-# Open32Drone Minimal downloads
+# Open32Drone downloads
 
 [English](README.md) · [简体中文](README.zh-CN.md)
 
-This directory contains the installable set retained for `feat-minimal`. Use
-only files from this directory; do not mix in firmware or clients recovered
-from older commits.
+The `minimal` directory and filenames are retained for existing download and
+update compatibility. The project is called Open32Drone, not a separate Minimal edition.
 
-| File | Purpose |
+## Publication preview — not a new flight-validated release
+
+Use the files in this directory as one set. See the project's [Apache-2.0 license](../../../LICENSE)
+and [third-party terms](../../../docs/project/third-party.md). This is a publication
+preview, not a new flight-validated release.
+
+| File | Use |
 |---|---|
-| `Open32Drone-minimal-merged.bin` | Complete 8 MiB image for an erased/new MCU; flash by USB at offset `0x0` |
-| `Open32Drone-minimal-app.bin` | Application-only image for the ground-only A/B OTA endpoint; never upload the merged image through OTA |
-| `Open32Drone-Controller-0.1.apk` | Android control/camera client (`versionName 0.1`, `versionCode 1`) |
-| `Open32Drone-ROS2-minimal.tar.gz` | ROS 2 `0.1.0` source package with launch, control, telemetry, TF, and test tools |
-
-## Current update
-
-- Both firmware images were rebuilt from the current `feat-minimal` source.
-  The standard image uses the MPU6500/MPU9250 FlixPeriph backend, a fixed
-  `300 Hz` complete-control schedule, and bounded `150/100/50 Hz`
-  MAVLink/CLI/OTA services. Its embedded source SHA-256 binds both downloads to
-  the current firmware tree. The tracked build remains AP-first after a complete
-  erase; router STA defaults are not embedded in these public artifacts.
-- Add operator-selected router STA mode with an eight-second recovery-AP path.
-  MAVLink, Android camera, Android OTA, and ROS all use the selected aircraft
-  IPv4 address. Only one Android or ROS controller may own an aircraft at a time.
-- Add the bounded QVGA, JPEG-quality-10, 10 FPS MJPEG camera candidate. It uses
-  a separate LEDC timer/channel, one low-priority core-0 HTTP task, one stream
-  client, and no work in the `300 Hz` flight loop. Camera failure remains
-  non-fatal.
-- Position Hold now applies `POS_STICK_V=0.70 m/s` once to the final XY command
-  vector, separates the `2.5 m/s` flow-sample plausibility check from commanded
-  speed, and keeps temporary flow-gate fallback inside the existing `12 deg`
-  position envelope instead of falling through to the `30 deg` Stabilize
-  envelope. Flight logs expose this path as `posFallback`.
-- The compiled standard-airframe defaults now match the successful-flight
-  values `CTL_R_P=4.47`, `CTL_P_P=4.47`, and `ALT_P=0.747`. Accelerometer,
-  transmitter, and voltage-divider calibration remain per device and are not
-  copied from the test aircraft.
-- ICM20948 and MPU6050 remain source/CI compile profiles, not extra downloads.
-  They require separate board and flight validation before distribution.
-- The Android client uses a configurable aircraft IPv4 address for MAVLink,
-  camera, and OTA. It rejects UDP telemetry/ACKs from other addresses on a
-  shared router. The compact control panel and `180 x 135 dp` 4:3 camera window
-  sit between the two joysticks; the preview uses `fitCenter` and background
-  decode priority. Position takeoff always hands over to `POS_HOLD`.
-- The APK was rebuilt from the current Android source. Its package remains
-  `com.osrbot.open32drone.controller`, and its signer matches the previous APK,
-  so it can be installed as an update.
-- ROS 2 now isolates each aircraft by IPv4 address, MAVLink System ID, local UDP
-  bind port, ROS namespace, and TF prefix. The reliable telemetry bridge,
-  lifecycle services, `cmd_vel`, absolute position, raw RC, RViz, bench test,
-  and supervised flight test remain in the archive. Its service/client callback
-  groups and MAVROS sensor QoS are safe for asynchronous lifecycle commands;
-  its process helper also refuses to signal a stale, reused PID.
-
-## Verify before installation
+| `Open32Drone-minimal-merged.bin` | Complete 8 MiB USB image; new/erased MCU, offset `0x0` |
+| `Open32Drone-minimal-app.bin` | Application-only, ground-only A/B OTA; never flash it at `0x0` |
+| `Open32Drone-Controller-0.1.apk` | Android 0.1 (`versionCode 1`), debug signed |
+| `Open32Drone-ROS2-minimal.tar.gz` | ROS 2 source package 0.1.0 |
 
 ```bash
 shasum -a 256 -c SHA256SUMS
 ```
 
-Current identity:
+### What changed in this preview
 
-- firmware: Arduino-ESP32 `3.3.6`, FlixPeriph `1.10.4`, MAVLink `2.0.25`;
-- board: `esp32:esp32:XIAO_ESP32S3` with `PSRAM=opi`,
-  `PartitionScheme=default_8MB`, and `FlashMode=dio`;
-- Android: `0.1` (`versionCode 1`, debug signed);
-- ROS 2 package: `0.1.0`.
+- Flight firmware source, parameters and hardware mappings are unchanged.
+  Both binaries were rebuilt with anonymous compiler paths. Their hashes differ
+  from earlier downloads, so previous flight results do not validate these bytes.
+- The APK is unchanged. Its signing certificate is public verification material,
+  not the private signing key. Installing another developer's debug build may
+  require uninstalling this app first; export any settings you need.
+- ROS runtime source is unchanged; the package project URL was updated and the
+  archive regenerated. Package contents are checked against the `software/ros2/` tree.
 
-The standard firmware and both alternate IMU profiles passed clean sequential
-compilation with the pinned ESP32-S3 toolchain; only the standard firmware is
-packaged here. The standard artifacts passed source-identity, image-layout,
-partition, and A/B rollback-symbol checks. The operator previously confirmed
-the retained `4.47 / 4.47 / 0.747` control defaults in flight, but this newly
-packaged network/camera artifact still requires its own board, link, camera,
-and free-flight confirmation. Alternate IMU profiles remain compile-only.
-The APK passed unit tests, lint, build, signature verification, and manifest
-readback. It uses a debug signer, so allow this file source on the phone. The
-ROS 2 archive exactly matches the current `ros2/` source tree; this packaging
-check is not a live ROS deployment or flight result.
+### Versions and validation boundary
 
-The exact firmware/APK pair still needs a device check in both direct-AP and
-router-STA modes: verify telemetry comes only from the selected aircraft,
-confirm the compact camera preview and retry path, hold Position takeoff,
-observe AUTO during the climb, then confirm Position after handover and verify
-both sticks before moving farther.
+| Component | Build/identity | Remaining verification |
+|---|---|---|
+| Firmware | Arduino-ESP32 3.3.6, FlixPeriph 1.10.4, MAVLink 2.0.25; standard MPU6500/MPU9250 profile | Rebuilt preview requires boot, bench and flight checks; no hardware deployment was performed for this cleanup |
+| Android | 0.1, API 26+, compiled with SDK 35, debug signed | No new APK build or device test in this cleanup |
+| ROS 2 | 0.1.0, MAVROS; source archive | Test against the installed ROS/MAVROS environment; software checks do not prove a flight |
 
-For a first aircraft, use only [Getting started](../../docs/GETTING_STARTED.md):
-section 4 chooses direct AP or router STA, and section 8 covers Android. After
-the ordinary first flight passes, continue to
-[ROS 2 control and development](../../docs/ROS2.md).
+Firmware board options: `esp32:esp32:XIAO_ESP32S3:PSRAM=opi,PartitionScheme=default_8MB,FlashMode=dio`.
+The source hash embedded in both binaries is checked by the repository tests.
+Builds use AP mode with empty compiled STA defaults; do not distribute a
+router-personalized image or a Flash/NVS backup.
+
+### Known limitations
+
+- A real FCU ACK and actual AUTO telemetry confirmation are required for ROS
+  Offboard. Continuous velocity control can terminate if position, state,
+  heartbeat or setpoint freshness is lost. Environment-specific timeout reports
+  are not fully resolved. Land and preserve a short diagnostic excerpt rather
+  than repeatedly restarting motion or increasing watchdog thresholds.
+- Optical flow depends on lighting/texture; ToF is distance to the surface below.
+- One Android or ROS network flight owner, and one camera viewer per aircraft.
+- Alternate IMU profiles are source/build options, not additional validated downloads.
+- Complete URDF/USD assets and pretrained policies are not part of this package.
+
+Start with [Getting started](../../../docs/guide/04-firmware-flight.en.md), then
+[ROS 2](../../../docs/guide/06-ros.en.md). See [Development](../../../docs/reference/source-build.md)
+to rebuild the exact component you change.

@@ -121,7 +121,7 @@ class FirmwareContractTests(unittest.TestCase):
         wifi = source("wifi.ino")
         cli = source("cli.ino")
         parameters = source("parameters.ino")
-        ignore_rules = (ROOT / ".gitignore").read_text(encoding="utf-8").splitlines()
+        ignore_rules = (ROOT.parent / ".gitignore").read_text(encoding="utf-8").splitlines()
         self.assertIn("const int W_AP = 1, W_STA = 2", wifi)
         self.assertIn("OPEN32DRONE_WIFI_BOOT_MODE", wifi)
         self.assertIn('storage.getString("WIFI_STA_SSID", OPEN32DRONE_WIFI_STA_SSID)', wifi)

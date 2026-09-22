@@ -1,0 +1,15 @@
+{
+  "name": "open32drone",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "docs:dev": "vitepress dev docs",
+    "docs:build": "vitepress build docs",
+    "docs:check": "npm run docs:build && node software/tests/check_docs_navigation.mjs",
+    "docs:preview": "vitepress preview docs"
+  },
+  "devDependencies": {
+    "vitepress": "1.6.4",
+    "vue": "3.5.42"
+  }
+}
