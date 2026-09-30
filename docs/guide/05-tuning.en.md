@@ -1,81 +1,147 @@
-# 05 · Tuning and troubleshooting
+# 04 · Flight tuning
 
-## Tune from the inside out
+Before changing parameters, observe the problem and check mechanics, sensors and power. Change one value at a time, repeat the same short maneuver and compare the result. Two or three repeated comparisons make it easier to identify what caused the difference.
 
-The control layers are angular rate → attitude → vertical/velocity → horizontal
-position. Establish a mechanically sound, calibrated aircraft first. Use the
-same `0.65 m → hover 5 s → land` maneuver and compare one changed parameter.
+## 4.1 Is it a parameter problem?
 
-| Layer | Parameter | Default |
-|---|---|---:|
-| Roll/pitch rate | `CTL_R_RATE_P`, `CTL_P_RATE_P` | 0.05 |
-| Roll/pitch rate | corresponding `RATE_I` / `RATE_D` | 0.20 / 0.001 |
-| Roll/pitch angle | `CTL_R_P`, `CTL_P_P` | 4.47 |
-| Altitude | `ALT_P`, `ALT_I`, `ALT_D` | 0.747 / 0.10 / 0.20 |
-| Hover feed-forward | `ALT_HOVER` | 0.49 |
-| Vertical speed | `ALT_VEL_MAX` | 0.45 m/s |
-| Position | `POS_HOLD_P` | 0.85 |
-| Horizontal velocity | `POS_VEL_P_X/Y`, `POS_VEL_I_X/Y` | 0.35 / 0.04 |
-| Stick horizontal speed | `POS_STICK_V` | 0.70 m/s |
+Check hardware first for these symptoms:
 
-After excluding vibration, high-frequency rate oscillation may justify a small
-rate-P reduction (for example 0.050 → 0.045 on one axis). A slow outer-loop sway
-may instead justify an angle-P reduction (4.47 → 4.02). These are diagnostic
-comparisons, not automatic fixes. Restore the old value if response worsens.
-Check ToF continuity before changing altitude gains, and floor texture and flow
-freshness before changing position gains. Never tune around motor saturation.
+| Symptom | Check first |
+|---|---|
+| Flips to one side at takeoff | M0–M3 positions, rotation, CW/CCW propellers and IMU orientation |
+| One side is always weak | Propeller damage, bent motor shafts, connectors, motor temperature and battery sag |
+| Fine, high-frequency vibration | Deformed propellers, motor shafts, grommets, motor height and IMU mounting |
+| Position hold fails only on certain floors | Texture, reflections, lighting and the optical-flow window |
+| Height readings jump | ToF window, module tilt, near-range blind zone and wiring |
+| Balance changes after a battery swap | Battery and accessory positions and actual takeoff mass |
 
-Read `p` first; write one parameter with `p NAME VALUE`, wait one second and
-read it back. Keep old/new values and the observed effect. Download `log dump`
-while disarmed and compare attitude/height targets, measurements, motor output,
-`voltage`, `hoverFF` and `voltComp`. The reusable analyzer is:
+Once the mechanics are stable, compare flights with the same battery, floor and height. Start with “take off to 0.65 m → center the sticks and hover for 5 seconds → land.”
 
-```bash
-python3 software/simulation/course/analyze_log.py \
-  --csv /path/to/flight.csv --output output/my-flight-analysis
-```
+## 4.2 Understand the four control layers {#tune-from-the-inside-out}
 
-Diagnose Open32Drone from the lowest failed layer upward. Do not compensate for
-a hardware, calibration, or firmware failure by adding client retries or
-changing several control parameters at once.
+Check the loops from the inside out:
 
-## The five evidence layers
+[![Tune from the inner loops to the outer loops](/media/figures/tuning-order.en.svg)](/media/figures/tuning-order.en.svg)
 
-```mermaid
-flowchart TD
-  A[1. Artifact and full flash] --> B[2. Boot, storage, IMU, TF-0850]
-  B --> C[3. Android / ROS / SBUS link]
-  C --> D[4. Propeller-off pre-arm and motor test]
-  D --> E[5. Guarded flight behavior]
-```
+Stabilize the inner loops before adjusting the outer loops. P sets how strongly an error is corrected, I removes persistent error and D reduces overshoot caused by rapid change. Usually start with P, then I, and adjust D only when needed.
 
-A result at one layer proves only that layer. A successful build does not prove
-a flash; a topic list does not prove an FCU link; a takeoff does not prove
-stable hold or safe landing.
-
-## Collect a minimal evidence bundle
-
-With the aircraft disarmed and propellers removed, capture:
+List all parameters:
 
 ```text
-sys
-time
-perf reset
-# keep one workload active for 10-20 seconds, then run: perf
-imu
-flow
-alt
-rc
-wifi
-ota
 p
-log
 ```
 
-For a flight issue, run `log dump` only after the aircraft is safely disarmed.
-Record the firmware filename and SHA-256, whether the flash was complete or OTA,
-the airframe, battery state, floor texture, lighting, launch height, control
-source, and the exact visible symptom. Change one variable per A/B comparison.
+Read or write one parameter:
+
+```text
+p CTL_R_P
+p CTL_R_P 4.02
+```
+
+Writes are saved to NVS. Record the old value first, then wait one second after writing and read it back.
+
+## 4.3 Attitude oscillation and return to level
+
+Standard attitude parameters are:
+
+| Function | Roll | Pitch | Default |
+|---|---|---|---:|
+| Angle P | `CTL_R_P` | `CTL_P_P` | 4.47 |
+| Angular-rate P | `CTL_R_RATE_P` | `CTL_P_RATE_P` | 0.05 |
+| Angular-rate I | `CTL_R_RATE_I` | `CTL_P_RATE_I` | 0.20 |
+| Angular-rate D | `CTL_R_RATE_D` | `CTL_P_RATE_D` | 0.001 |
+
+### High-frequency oscillation
+
+If the aircraft takes off but shakes rapidly and continuously, fix propeller and motor vibration first. With sound mechanics, reduce the affected axis's angular-rate P by 5–10%. For example, change Roll from `0.050` to `0.045`:
+
+```text
+p CTL_R_RATE_P 0.045
+```
+
+Repeat the same 5-second hover. If oscillation decreases and control remains firm, apply the same reduction to Pitch. Do not change P, I and D together.
+
+### Slow oscillation or an overly sharp return to level
+
+Large, low-frequency swings are more likely to involve the outer angle-P loop. Reduce `CTL_R_P` or `CTL_P_P` by about 10%, for example `4.47 → 4.02`. If the aircraft becomes sluggish and takes too long to level after releasing the sticks, increase it slightly toward the original value.
+
+### Persistent lean to one side
+
+A consistent lean usually calls for checking balance, motor thrust, frame distortion or accelerometer bias. Move the battery to center the balance, then repeat `ca`. Analyze the I term only if the same bias persists after mechanics and calibration have been checked.
+
+## 4.4 Altitude problems
+
+The main altitude parameters are:
+
+| Parameter | Default | Purpose |
+|---|---:|---|
+| `ALT_P` | 0.747 | Main correction for height error |
+| `ALT_I` | 0.10 | Remove persistent height error |
+| `ALT_D` | 0.20 | Reduce overshoot using vertical velocity |
+| `ALT_HOVER` | 0.49 | Nominal hover-thrust feed-forward |
+| `ALT_VEL_MAX` | 0.45 | Maximum climb/descent speed |
+
+For slow up-and-down oscillation around the target height, first check that ToF data is continuous, then reduce `ALT_P` by about 10%, for example:
+
+```text
+p ALT_P 0.67
+```
+
+If attitude is stable after takeoff but height gradually drifts low or high, inspect `ALT_I` and adjust it slightly. If the aircraft overshoots the target and then reverses, focus on ToF velocity and `ALT_D`.
+
+`ALT_HOVER` is the collective thrust needed to maintain height near nominal voltage. The reference for an 81 g aircraft with 60 mm propellers is 0.49. If sensors and attitude are stable but hovering always needs a large altitude correction, estimate mean motor output from a flight log and adjust slightly. Do not raise `ALT_HOVER` to hide an aging battery or weak motor.
+
+## 4.5 Horizontal drift and position hold
+
+Position hold depends on optical flow. Default parameters are:
+
+| Parameter | Default | Purpose |
+|---|---:|---|
+| `POS_HOLD_P` | 0.85 | Convert position error to target velocity |
+| `POS_VEL_P_X/Y` | 0.35 | Horizontal velocity P |
+| `POS_VEL_I_X/Y` | 0.04 | Horizontal velocity I |
+| `POS_STICK_V` | 0.70 | Maximum stick-commanded horizontal speed |
+
+Run `flow` over a clearly textured floor and confirm continuous updates. Circular drift during yaw calls for checking the standard 24 mm forward sensor offset and whether the module is level. For drift in a fixed direction, recheck flow bias, battery balance and IMU calibration.
+
+If the aircraft slowly leaves the target and returns too slowly, increase `POS_HOLD_P` slightly. If it oscillates around the target, decrease it. Change 5–10% at a time and use the same hold height and flight duration.
+
+## 4.6 Battery and thrust changes
+
+The reference battery is about 4.2 V when full, and available motor thrust decreases during discharge. The board reads voltage through a 100 kΩ / 100 kΩ divider on `GPIO1/A0`. Assisted altitude and position hold use bounded feed-forward compensation.
+
+Calibrate `PWR_VOLT_SCALE` with `pw` and a multimeter first. Repeat the same 5-second hover with a fresh and a lower-charge battery, comparing `voltage`, `hoverFF`, `voltComp` and all four motor outputs. If all four approach saturation as voltage drops, check battery internal resistance, propellers and motors before raising PID gains.
+
+## 4.7 Compare two flights using logs
+
+With the aircraft disarmed, run:
+
+```text
+log dump
+```
+
+Save the CSV, then use the repository's analysis script:
+
+```bash
+python3 simulation/course/analyze_log.py \
+  --csv /path/to/flight.csv \
+  --output output/my-flight-analysis
+```
+
+Compare at least these curves or fields:
+
+- Target and actual Roll/Pitch.
+- ToF height and target height.
+- Optical-flow velocity and position error.
+- Four motor outputs and any saturation.
+- Battery voltage and compensation.
+- Times immediately before and after the problem.
+
+Record the original parameter, new value, maneuver and observation each time, using the same maneuver for comparison. Keep improvements and continue in small steps; restore the old value if the result worsens. Save the records so you can look up which parameters this aircraft has used and how they performed.
+
+Once the aircraft can repeat position-hold takeoff, a 5–10-second hover, small translations and automatic landing, begin ROS control experiments.
+
+## 4.8 Troubleshoot error messages
 
 ## Boot and pre-arm failures
 
@@ -112,8 +178,7 @@ motor. `cg` restarts only gyro calibration; it does not replace `ca`.
 ### `invalid RC calibration/mapping`
 
 Run `cr` with the receiver powered and follow all eight prompts. Each control
-must map to a distinct persistent channel `0..7`. A powered-off receiver is not
-required for Android or ROS flight.
+must map to a distinct persistent channel `0..7`. Android or ROS flight does not require the receiver to be powered on.
 
 ### Parameter storage error
 
@@ -132,16 +197,16 @@ named stage costs. `imu acquire` is the selected backend's `read()` cost; a
 backend may perform family-specific internal transfers. The scheduled idle wait
 is deliberately outside `perf`, so its sampled total is execution cost rather
 than the 3.33 ms period. Large CLI, MAVLink, or housekeeping maxima point to a
-different cause. The 25 Hz log is a RAM ring buffer and must be proven in the
-housekeeping stage before it is blamed.
+different cause. Check the housekeeping-stage timings when investigating
+logging overhead; the 25 Hz log is stored in a RAM ring buffer.
 
 ## TF-0850 and calibration
 
 ### Android says ToF is not ready while the aircraft is on the floor
 
 The TF-0850 blind zone is below roughly `20 mm`. A fresh blind-zone packet is
-valid ground-readiness evidence even though no numeric range can be displayed.
-The Android message is diagnostic, not a separate takeoff veto. If the button
+enough for the firmware's ground sensor check, even though no numeric range can be displayed.
+This Android message alone does not block takeoff. If the button
 is disabled, diagnose MAVLink connection or physical SBUS ownership instead.
 
 Use `flow` and check:
@@ -154,9 +219,9 @@ Use `flow` and check:
 ### Accelerometer calibration is rejected
 
 Run `ca` disarmed, remove propellers, place the aircraft on all six requested
-faces, and keep it motionless during collection. Calibration is transactional:
-any invalid face, excessive noise, gravity magnitude, scale, or residual causes
-the complete candidate to be rejected and the previous values to remain active.
+faces, and keep it motionless during collection. If any face is unstable or its
+measurements fail the checks, the new calibration is rejected and the previous
+values remain active.
 
 ### Two identical aircraft do not fly identically
 
@@ -253,85 +318,6 @@ Direct `/open32drone/cmd_vel` must be streamed continuously. Physical SBUS movem
 priority. Do not change firmware gains to compensate for an inactive Offboard
 state.
 
-## Flight symptoms
-
-### Automatic takeoff does not rise or stops low
-
-Check `alt`, `flow`, and `log dump` for:
-
-- a fresh TF-0850 packet and correct relative ground reference;
-- takeoff phase and target height;
-- thrust limit versus actual mixed motor saturation;
-- valid height updates rather than a frozen or jumping range;
-- a battery physically capable of producing thrust.
-
-Use `pw` to compare voltage with a DMM. Voltage is not an automatic low-battery
-decision and never inhibits takeoff; it adjusts assisted hover feed-forward
-within the symmetric `1/PWR_COMP_MAX..PWR_COMP_MAX` bound. Check `voltage`,
-`voltComp`, `hoverFF`, and `altCorrection` in `log dump`. Do not raise
-`ALT_TKO_THR` until motor direction, propellers, battery, and range data are
-known good.
-
-To calibrate compensation without mixing other variables, fly the same simple
-`0.65 m -> hover 5 s -> land` sequence once on a fresh cell and once when that
-cell is weaker but still safely flyable. Keep sticks centered and send both log
-dumps. Compare the median loaded voltage and hover thrust; keep the fitted
-defaults unless repeated evidence justifies changing one compensation parameter.
-
-### A visible second acceleration during takeoff
-
-The current sequence is one continuous target ramp. A distinct second surge is
-not a desired phase. Capture `alt`, `flow`, and the flight log; check when ToF
-becomes active, whether height jumps, and whether the controller transitions
-from thrust-limited bootstrap to closed-loop height correction. Do not add a
-second client takeoff command.
-
-### Oscillation also occurs in Stabilize
-
-This points below Position Hold: vibration, loose IMU, propeller/motor damage,
-motor saturation, attitude/rate control, or timing. Optical-flow tuning cannot
-fix an oscillation that is already present in Stabilize.
-
-### Stabilize and Altitude Hold are smooth, but Position Hold drifts
-
-Inspect the optical-flow layer:
-
-- use a textured, non-reflective floor with stable light;
-- avoid very low altitude, sunlight glare, darkness, and repeating patterns;
-- verify the module points straight down and its axes match the airframe;
-- verify the compiled `24 mm` forward offset matches the actual mount;
-- inspect packet age, gaps, integration time, ground bias, and reject reasons.
-
-Slow residual drift and rapid oscillation are different faults. Do not increase
-all position gains at once.
-
-### Rotation creates sideways translation
-
-Yaw rotation makes an off-center flow sensor travel in a circle. The standard
-firmware compensates a sensor mounted `24 mm` forward of the yaw center. A
-different location or sign produces false horizontal velocity during yaw. Fix
-the mechanical location or isolate a clearly documented geometry change; do
-not use attitude trim to hide it.
-
-### Landing pauses, bounces, or drifts near the floor
-
-Near-ground flow quality and prop wash degrade before touchdown. Confirm that
-the ground reference is correct and landing was not cancelled by live throttle.
-The landing controller uses a one-way flare and must not climb again after
-touchdown commitment. If it does, capture the automatic phase, ToF range,
-vertical speed, thrust, and airborne/landed latch before changing descent
-parameters.
-
-### Aircraft flips or continues spinning after contact
-
-Use the physical bottom-left emergency-disarm gesture or the Android/ROS
-emergency stop immediately. Then disconnect power and inspect motor order,
-propeller direction, damaged shafts, loose motors, and IMU mounting. The minimal
-firmware does not use a complex collision classifier. Its simple guard disarms
-after estimated tilt exceeds `70 degrees` continuously for `250 ms`; a shorter
-or smaller disturbance deliberately does not trigger it. Keep explicit
-emergency stop available even after this guard is bench- and flight-validated.
-
 ## OTA failures
 
 OTA is accepted only while disarmed, landed, motor-inactive, outside automatic
@@ -345,10 +331,3 @@ http://<aircraft-ip>:8080/api/ota/status
 If an update fails, retain USB recovery access. A failed transfer should leave
 the running slot intact; a new image that fails boot validation should roll
 back.
-
-## When to change parameters
-
-Change a parameter only after all lower layers are proven and a repeatable log
-shows one specific control deficiency. Record the old value, new value,
-airframe, test maneuver, expected effect, and rollback value. Never change PID,
-estimator, flow compensation, and takeoff parameters together.

@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="700" viewBox="0 0 960 700" role="img" aria-labelledby="title desc">
+<title id="title">Position-control cascade</title><desc id="desc">Position error → desired velocity → Compute velocity error → Bounded roll / pitch target → Attitude loop → rate loop → Mixer → motor commands</desc>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#64748b"/></marker></defs>
+<style>text{font-family:Arial,'PingFang SC','Microsoft YaHei',sans-serif}</style>
+<rect width="960" height="700" rx="18" fill="#ffffff"/>
+<text x="35" y="48" text-anchor="start" font-size="30" font-weight="700" fill="#202127">Position-control cascade</text>
+<rect x="125" y="95" width="710" height="82" rx="13" fill="#eaf2fc" stroke="#2459a6" stroke-width="2"/>
+<text x="480" y="127" text-anchor="middle" font-size="24" font-weight="500" fill="#202127">Position error → desired velocity</text>
+<text x="480" y="159" text-anchor="middle" font-size="19" font-weight="500" fill="#526174">Position feedback</text>
+<text x="80" y="145" text-anchor="middle" font-size="26" font-weight="700" fill="#64748b">01</text>
+<path d="M480 177V205" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="125" y="210" width="710" height="82" rx="13" fill="#f6f8fa" stroke="#cbd5e1" stroke-width="2"/>
+<text x="480" y="242" text-anchor="middle" font-size="24" font-weight="500" fill="#202127">Compute velocity error</text>
+<text x="480" y="274" text-anchor="middle" font-size="19" font-weight="500" fill="#526174">Desired − measured horizontal velocity</text>
+<text x="80" y="260" text-anchor="middle" font-size="26" font-weight="700" fill="#64748b">02</text>
+<path d="M480 292V320" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="125" y="325" width="710" height="82" rx="13" fill="#f6f8fa" stroke="#cbd5e1" stroke-width="2"/>
+<text x="480" y="357" text-anchor="middle" font-size="24" font-weight="500" fill="#202127">Bounded roll / pitch target</text>
+<text x="480" y="389" text-anchor="middle" font-size="19" font-weight="500" fill="#526174">Horizontal velocity control</text>
+<text x="80" y="375" text-anchor="middle" font-size="26" font-weight="700" fill="#64748b">03</text>
+<path d="M480 407V435" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="125" y="440" width="710" height="82" rx="13" fill="#f6f8fa" stroke="#cbd5e1" stroke-width="2"/>
+<text x="480" y="472" text-anchor="middle" font-size="24" font-weight="500" fill="#202127">Attitude loop → rate loop</text>
+<text x="480" y="504" text-anchor="middle" font-size="19" font-weight="500" fill="#526174">Convert the target into torque</text>
+<text x="80" y="490" text-anchor="middle" font-size="26" font-weight="700" fill="#64748b">04</text>
+<path d="M480 522V550" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="125" y="555" width="710" height="82" rx="13" fill="#f6f8fa" stroke="#cbd5e1" stroke-width="2"/>
+<text x="480" y="587" text-anchor="middle" font-size="24" font-weight="500" fill="#202127">Mixer → motor commands</text>
+<text x="480" y="619" text-anchor="middle" font-size="19" font-weight="500" fill="#526174">Combine torque with collective thrust</text>
+<text x="80" y="605" text-anchor="middle" font-size="26" font-weight="700" fill="#64748b">05</text>
+</svg>

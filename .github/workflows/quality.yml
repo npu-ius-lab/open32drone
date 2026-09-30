@@ -5,6 +5,25 @@ on:
   pull_request:
 
 jobs:
+  documentation:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+          cache: npm
+      - run: npm ci
+      - run: npm run docs:check
+        env:
+          DOCS_BASE: /osrdrone/
+      - name: Check public link routing without deploying
+        run: npm run docs:check
+        env:
+          DOCS_BASE: /open32drone/
+          DOCS_REPOSITORY: npu-ius-lab/open32drone
+          DOCS_RELEASE_TAG: preview-link-check
+
   source-contracts:
     runs-on: ubuntu-latest
     steps:
@@ -13,9 +32,9 @@ jobs:
         with:
           python-version: "3.12"
       - name: Compile ROS 2 Python sources
-        run: python -m compileall -q software/ros2
+        run: python -m compileall -q ros2
       - name: Run repository source contracts
-        run: python -m unittest discover -s software/tests -v
+        run: python -m unittest discover -s tests -v
       - name: Reject whitespace errors
         run: git show --check --oneline --no-renames HEAD
 
@@ -40,8 +59,8 @@ jobs:
             --build-property "compiler.c.extra_flags=-ffile-prefix-map=${HOME}=/build" \
             --build-property "compiler.cpp.extra_flags=-ffile-prefix-map=${HOME}=/build" \
             --output-dir /tmp/open32drone-firmware \
-            software/firmware
-          source_id="$(sed -n 's/^#define OPEN32DRONE_FIRMWARE_SOURCE_SHA256 "\([0-9a-f]\{64\}\)"$/\1/p' software/firmware/source_identity.h)"
+            firmware
+          source_id="$(sed -n 's/^#define OPEN32DRONE_FIRMWARE_SOURCE_SHA256 "\([0-9a-f]\{64\}\)"$/\1/p' firmware/source_identity.h)"
           test "${#source_id}" -eq 64
           grep -aFq "$source_id" /tmp/open32drone-firmware/firmware.ino.bin
           nm_tool="$(find "$HOME/.arduino15/packages/esp32/tools" -type f -name xtensa-esp32s3-elf-nm | head -n 1)"
@@ -57,7 +76,7 @@ jobs:
               --fqbn esp32:esp32:XIAO_ESP32S3:PSRAM=opi,PartitionScheme=default_8MB,FlashMode=dio \
               --build-property "compiler.cpp.extra_flags=-DOPEN32DRONE_IMU_BACKEND=${backend}" \
               --output-dir "/tmp/open32drone-firmware-${backend}" \
-              software/firmware
+              firmware
           done
 
   android-controller:
@@ -69,12 +88,12 @@ jobs:
           distribution: temurin
           java-version: "17"
           cache: gradle
-          cache-dependency-path: software/android/**/*.gradle*
+          cache-dependency-path: android/**/*.gradle*
       - uses: android-actions/setup-android@v3
         with:
           packages: platform-tools
       - name: Install Android SDK 35
         run: sdkmanager "platforms;android-35" "build-tools;35.0.0"
       - name: Test, lint, and build the dedicated controller
-        working-directory: software/android
+        working-directory: android
         run: ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug

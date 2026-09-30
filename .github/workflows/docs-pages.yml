@@ -2,6 +2,11 @@ name: Deploy VitePress to GitHub Pages
 
 on:
   workflow_dispatch:
+    inputs:
+      release_tag:
+        description: 'Existing matching Release tag (required for public deployment)'
+        required: false
+        type: string
 
 permissions:
   contents: read
@@ -32,10 +37,18 @@ jobs:
       - name: Install documentation dependencies
         run: npm ci
 
+      - name: Verify public Release downloads
+        if: github.repository == 'npu-ius-lab/open32drone'
+        run: node tests/verify_public_release.mjs
+        env:
+          DOCS_RELEASE_TAG: "${{ inputs.release_tag }}"
+
       - name: Build VitePress site
-        run: npm run docs:build
+        run: npm run docs:check
         env:
           DOCS_BASE: "${{ steps.pages.outputs.base_path }}/"
+          DOCS_REPOSITORY: "${{ github.repository }}"
+          DOCS_RELEASE_TAG: "${{ inputs.release_tag }}"
 
       - name: Upload Pages artifact
         uses: actions/upload-pages-artifact@v5

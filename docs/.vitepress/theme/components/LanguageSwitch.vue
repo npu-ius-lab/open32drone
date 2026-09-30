@@ -54,8 +54,10 @@ const destination = computed(() => {
 <template>
   <details ref="root" class="language-switch">
     <summary ref="trigger" class="language-trigger"
-      aria-label="选择语言 / Select language" aria-controls="site-language-options">
-      {{ currentEnglish ? 'English' : '简体中文' }}
+      aria-label="Select language / 选择语言" aria-controls="site-language-options">
+      <span lang="zh-CN">中文</span>
+      <span aria-hidden="true">/</span>
+      <span lang="en">English</span>
       <span aria-hidden="true" class="chevron">⌄</span>
     </summary>
     <nav id="site-language-options" class="language-options" aria-label="语言 / Language">
@@ -69,14 +71,14 @@ const destination = computed(() => {
 
 <style scoped>
 .language-switch { position: relative; flex-shrink: 0; font-size: 14px; font-weight: 500; }
-.language-trigger { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; cursor: pointer; }
+.language-trigger { display: flex; align-items: center; gap: 6px; min-height: 44px; padding: 0 12px; white-space: nowrap; cursor: pointer; }
 .language-trigger { list-style: none; }
 .language-trigger::-webkit-details-marker { display: none; }
 .language-trigger:hover, .language-options a:hover { color: var(--vp-c-brand-1); }
 .chevron { transition: transform .2s; }
 .language-switch[open] .chevron { transform: rotate(180deg); }
-.language-options { position: absolute; top: 100%; right: 0; min-width: 148px; padding: 8px; border: 1px solid var(--vp-c-divider); border-radius: 12px; background: var(--vp-c-bg-elv); box-shadow: var(--vp-shadow-3); }
-.language-options a { display: block; padding: 8px 12px; border-radius: 6px; }
+.language-options { position: absolute; top: 100%; right: 0; min-width: 148px; padding: 8px; border: 1px solid var(--vp-c-divider); border-radius: 6px; background: var(--vp-c-bg-elv); box-shadow: var(--vp-shadow-1); }
+.language-options a { display: block; padding: 8px 12px; border-radius: 3px; }
 .language-options a[aria-current="page"] { color: var(--vp-c-brand-1); background: var(--vp-c-default-soft); }
 .language-trigger:focus-visible, .language-options a:focus-visible { outline: 2px solid var(--vp-c-brand-1); outline-offset: 2px; }
 </style>

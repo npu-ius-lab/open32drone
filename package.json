@@ -5,11 +5,15 @@
   "scripts": {
     "docs:dev": "vitepress dev docs",
     "docs:build": "vitepress build docs",
-    "docs:check": "npm run docs:build && node software/tests/check_docs_navigation.mjs",
-    "docs:preview": "vitepress preview docs"
+    "docs:check": "node --test tests/test_release_gate.mjs && npm run docs:build && node tests/check_docs_navigation.mjs && node tests/check_docs_preview.mjs",
+    "docs:preview": "node docs/.vitepress/preview.mjs"
   },
   "devDependencies": {
+    "vite": "6.4.3",
     "vitepress": "1.6.4",
     "vue": "3.5.42"
+  },
+  "overrides": {
+    "vitepress": { "vite": "$vite" }
   }
 }

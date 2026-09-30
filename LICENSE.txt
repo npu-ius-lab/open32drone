@@ -1,0 +1,20 @@
+Open32Drone licensing summary
+
+Test methods and other components that carry separate license notices remain
+subject to their respective licenses. Unless otherwise stated in a file or
+component, original Open32Drone code and documentation, including project-authored
+tests, are licensed under the Apache License, Version 2.0.
+
+The full Apache License 2.0 text is in the LICENSE file at the repository root:
+https://www.apache.org/licenses/LICENSE-2.0
+
+Third-party code, dependencies, hardware designs and media retain their applicable
+licenses and attribution requirements. This summary does not replace those terms
+or relicense third-party material.
+
+For component sources and existing exceptions, see:
+  docs/project/third-party.md
+  docs/project/third-party.zh-CN.md
+
+This file summarizes the licensing scope; it does not change the terms in LICENSE
+or any applicable third-party license.

@@ -1,43 +1,34 @@
 # Contributing
 
-## Report a reproducible problem
+Contributions are welcome, whether reporting issues, fixing code or improving the tutorials.
 
-Use [GitHub Issues](https://github.com/npu-ius-lab/open32drone/issues). Include:
+## Reporting issues
 
-1. Download/source version; firmware, APK or ROS package in use.
-2. Board, IMU, propeller diameter and control method (SBUS/Android/ROS).
-3. Exact steps or command, expected behavior and actual behavior.
-4. A short relevant log excerpt; for ROS, include the launch error and Offboard
-   status around the failure. Include ROS/MAVROS versions and loaded package path
-   with the personal part of the path replaced by a placeholder.
+Search [GitHub Issues](https://github.com/npu-ius-lab/open32drone/issues) before opening a new issue. If the problem has not been reported, include:
 
-Do not post router credentials, tokens, full flash/NVS dumps, signing keys,
-personal home-directory names, unrelated people in photos or complete desktop
-captures. Redact these before upload. Do not rerun a hazardous flight merely
-to obtain a log.
+1. Firmware, app and ROS 2 software versions; include the source revision if you built it yourself.
+2. Controller board, IMU, propeller diameter and control method.
+3. Complete steps or commands, expected behavior and actual behavior.
+4. Short logs from before and after the fault; for ROS issues, include launch errors, Offboard status and ROS/MAVROS versions.
 
-## Change code
+## Feature requests
 
-Keep one issue per change. Preserve the flight/client ownership contract and
-update both language references when behavior changes. For tuning, record the
-old/new values and the measured effect; do not bundle unrelated gain changes.
+Open an Issue describing the use case, what the current implementation is missing and the behavior you would like to see. Discuss the scope and submission approach with the maintainers before starting a large feature or interface change.
 
-From the repository root:
+## Submitting changes
 
-```bash
-python3 -m unittest discover -s software/tests -v
-git diff --check
-npm ci
-npm run docs:build
-```
+Create a working branch and keep each pull request focused on one issue. Follow the existing style and avoid unrelated formatting or parameter changes.
 
-Firmware, APK and ROS builds are described in [Development](../reference/source-build.md).
-A software check does not prove a new binary's hardware behavior. Document what
-was actually tested and what remains unverified.
+A pull request should describe:
 
-Keep local builds under ignored `output/`; do not add flight captures or
-machine configuration. Put reusable regression tests in `software/tests/` or Android's
-test source, not one-off experiment scripts.
+- The problem it addresses, with a link to the issue if available.
+- What changed and which functions are affected.
+- Test methods and results, including anything that has not been verified.
 
-Check [source/license status](third-party.md) before contributing third-party
-code or assets. Credit the original author and include the applicable terms.
+For bug fixes, add a regression test where possible. If an interface changes, check the firmware, Android app and ROS 2 package together. For parameter changes, record the old and new values and the measured effect.
+
+See [Source and build](../reference/source-build.md) for build and test commands.
+
+## License
+
+Contributions follow the licensing scope in [LICENSE.txt](../../LICENSE.txt). When adding third-party material, identify its source and retain its copyright and license notices and update the [Third-party notices](third-party.md).

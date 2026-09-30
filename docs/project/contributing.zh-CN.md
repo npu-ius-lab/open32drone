@@ -1,37 +1,34 @@
 # 参与项目
 
-## 反馈可复现问题
+欢迎提交问题、修复代码或完善教程。
 
-在 [GitHub Issues](https://github.com/npu-ius-lab/open32drone/issues) 提供：
+## 反馈问题
 
-1. 下载文件/源码版本，以及固件、APK、ROS 包身份。
+提交前，请先搜索 [GitHub Issues](https://github.com/npu-ius-lab/open32drone/issues)，确认是否已有相同问题。新建 Issue 时，请提供以下信息：
+
+1. 使用的固件、App 和 ROS 2 软件版本；自行编译时附源码版本。
 2. 主板、IMU、桨叶直径、控制方式（SBUS/Android/ROS）。
 3. 完整操作步骤或命令、预期和实际结果。
 4. 故障前后短日志；ROS 问题附启动错误、Offboard 状态及 ROS/MAVROS 版本。
-   加载包路径中的个人目录部分用占位符替换。
 
-不要上传路由器密码、令牌、Flash/NVS 全量备份、签名私钥、个人主目录名、
-含无关人员的照片或完整桌面截图。先脱敏再提交，不为补日志重复危险飞行。
+## 功能建议
 
-## 修改代码
+请在 Issue 中说明使用场景、现有功能的不足，以及希望增加或调整的行为。涉及较大功能或接口变更时，先与维护者讨论修改范围和提交方式。
 
-一个改动对应一个问题。保留飞控/客户端控制权契约，行为变化同步更新中英文说明。
-调参需要记录改前改后及测量效果，不混入无关增益修改。
+## 提交修改
 
-仓库根目录运行：
+在工作分支中完成修改。每个 Pull Request（PR）只处理一个问题，沿用相关文件的代码风格，避免混入无关的格式调整或参数变更。
 
-```bash
-python3 -m unittest discover -s software/tests -v
-git diff --check
-npm ci
-npm run docs:build
-```
+PR 描述应包含：
 
-固件、APK、ROS 构建见[开发指南](../reference/source-build.zh-CN.md)。
-软件检查不能代表新二进制的硬件效果；说明实际测试范围和未验证项。
+- 解决的问题；已有 Issue 时附上链接。
+- 修改内容及受影响的功能。
+- 测试方法和结果；未验证的部分也请注明。
 
-本地构建进入忽略的 `output/`，不要提交飞行采集数据和机器配置。
-可重复回归测试放在 `software/tests/` 或 Android 测试源码，不加入一次性实验脚本。
+修复 Bug 时，尽量补充能复现问题的测试。修改控制接口时，同步检查固件、Android 和 ROS 2 的处理逻辑。调整飞行参数时，记录原值、新值和实际效果。
 
-引入第三方代码和素材前阅读[来源与许可](third-party.zh-CN.md)，
-保留作者署名和适用条款。
+固件、Android 和 ROS 2 的编译方法见[源码与编译](../reference/source-build.zh-CN.md)。
+
+## 许可证
+
+项目许可范围见 [LICENSE.txt](../../LICENSE.txt)。引入第三方代码或素材时，请注明来源，保留原有版权声明和许可证，相关说明见[第三方声明](third-party.zh-CN.md)。
