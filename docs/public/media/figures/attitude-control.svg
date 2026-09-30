@@ -1,0 +1,35 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1000" height="650" viewBox="0 0 1000 650" role="img" aria-labelledby="title desc">
+<title id="title">姿态与角速度控制</title><desc id="desc">角度误差生成角速度目标，角速度误差生成力矩，总推力与力矩经过混控输出电机命令。</desc>
+<defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0 0L8 4L0 8Z" fill="#64748b"/></marker></defs>
+<style>text{font-family:Arial,'PingFang SC','Microsoft YaHei',sans-serif}</style>
+<rect width="1000" height="650" rx="18" fill="#ffffff"/>
+<text x="35" y="48" text-anchor="start" font-size="30" font-weight="700" fill="#202127">姿态与角速度控制</text>
+<path d="M310 158H365" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M610 158H665" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M790 200V245H190V295" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M310 338H365" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M610 338H665" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M790 380V435H490V490" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M310 535H365" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<path d="M610 535H665" fill="none" stroke="#64748b" stroke-width="2.5" stroke-linejoin="round" marker-end="url(#arrow)"/>
+<rect x="65" y="110" width="245" height="90" rx="13" fill="#edf2f7" stroke="#cbd5e1" stroke-width="2"/>
+<text x="187.5" y="142" text-anchor="middle" font-size="24" font-weight="500" fill="#202127">角度误差</text>
+<text x="187.5" y="174" text-anchor="middle" font-size="19" font-weight="500" fill="#526174">目标角度 − 实测角度</text>
+<rect x="370" y="110" width="240" height="90" rx="13" fill="#f6f8fa" stroke="#cbd5e1" stroke-width="2"/>
+<text x="490" y="163" text-anchor="middle" font-size="24" font-weight="500" fill="#202127">姿态 P 控制器</text>
+<rect x="670" y="110" width="240" height="90" rx="13" fill="#f6f8fa" stroke="#cbd5e1" stroke-width="2"/>
+<text x="790" y="163" text-anchor="middle" font-size="24" font-weight="500" fill="#202127">目标角速度</text>
+<rect x="65" y="300" width="245" height="80" rx="13" fill="#f6f8fa" stroke="#cbd5e1" stroke-width="2"/>
+<text x="187.5" y="348" text-anchor="middle" font-size="24" font-weight="500" fill="#202127">角速度误差</text>
+<rect x="370" y="300" width="240" height="80" rx="13" fill="#f6f8fa" stroke="#cbd5e1" stroke-width="2"/>
+<text x="490" y="348" text-anchor="middle" font-size="24" font-weight="500" fill="#202127">角速度 PID</text>
+<rect x="670" y="300" width="240" height="80" rx="13" fill="#f6f8fa" stroke="#cbd5e1" stroke-width="2"/>
+<text x="790" y="348" text-anchor="middle" font-size="24" font-weight="500" fill="#202127">目标力矩</text>
+<text x="190" y="278" text-anchor="middle" font-size="20" font-weight="500" fill="#526174">减去实测角速度</text>
+<rect x="65" y="490" width="245" height="90" rx="13" fill="#f6f8fa" stroke="#cbd5e1" stroke-width="2"/>
+<text x="187.5" y="543" text-anchor="middle" font-size="24" font-weight="500" fill="#202127">总推力</text>
+<rect x="370" y="490" width="240" height="90" rx="13" fill="#eaf2fc" stroke="#2459a6" stroke-width="2"/>
+<text x="490" y="543" text-anchor="middle" font-size="24" font-weight="500" fill="#202127">四电机混控</text>
+<rect x="670" y="490" width="240" height="90" rx="13" fill="#f6f8fa" stroke="#cbd5e1" stroke-width="2"/>
+<text x="790" y="543" text-anchor="middle" font-size="24" font-weight="500" fill="#202127">四路电机命令</text>
+</svg>

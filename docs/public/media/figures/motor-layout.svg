@@ -1,0 +1,31 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="960" height="650" viewBox="0 0 960 650" role="img" aria-labelledby="title desc">
+  <title id="title">Open32Drone 电机编号 · 顶视图</title>
+  <desc id="desc">前左 M3, 前右 M2, 后左 M0, 后右 M1. +X forward, +Y left.</desc>
+  <defs><marker id="arrow" markerWidth="7" markerHeight="7" refX="6" refY="3.5" orient="auto"><path d="M0 0L7 3.5L0 7Z" fill="#2459a6"/></marker></defs>
+  <style>text{font-family:Arial,'PingFang SC','Microsoft YaHei',sans-serif;fill:#202127}.title{font-size:26px;font-weight:700}.label{font-size:21px;font-weight:600}.small{font-size:18px;fill:#526174}.id{font-size:32px;font-weight:700}.axis{stroke:#2459a6;stroke-width:2;marker-end:url(#arrow)}</style>
+  <rect width="960" height="650" rx="20" fill="#ffffff"/>
+  <text x="36" y="48" class="title">电机编号 · 顶视图</text>
+  <text x="924" y="48" text-anchor="end" class="small">Open32Drone</text>
+  <path d="M315 220L645 460M645 220L315 460" stroke="#cbd5e1" stroke-width="44" stroke-linecap="round"/>
+  <rect x="404" y="264" width="152" height="152" rx="30" fill="#f1f5f9" stroke="#94a3b8" stroke-width="2"/>
+  <path d="M459 292L480 278L501 292" fill="none" stroke="#2459a6" stroke-width="4" stroke-linecap="round"/>
+  <circle cx="480" cy="340" r="6" fill="#2459a6"/>
+  <text x="480" y="379" text-anchor="middle" class="small">机体中心</text>
+  <g fill="#f6f8fa" stroke="#2459a6" stroke-width="2">
+    <circle cx="315" cy="220" r="62"/><circle cx="645" cy="220" r="62"/>
+  </g>
+  <g fill="#edf2f7" stroke="#94a3b8" stroke-width="2">
+    <circle cx="315" cy="460" r="62"/><circle cx="645" cy="460" r="62"/>
+  </g>
+  <g text-anchor="middle">
+    <text x="315" y="215" class="id">M3</text><text x="315" y="245" class="small">前左</text>
+    <text x="645" y="215" class="id">M2</text><text x="645" y="245" class="small">前右</text>
+    <text x="315" y="455" class="id">M0</text><text x="315" y="485" class="small">后左</text>
+    <text x="645" y="455" class="id">M1</text><text x="645" y="485" class="small">后右</text>
+  </g>
+  <path d="M480 252V140" class="axis"/><text x="480" y="117" text-anchor="middle" class="label">机头 / +X</text>
+  <path d="M393 340H237" class="axis"/><text x="218" y="347" text-anchor="end" class="label">左 / +Y</text>
+  <path d="M567 340H723" class="axis"/><text x="742" y="347" class="label">右 / −Y</text>
+  <path d="M480 428V540" class="axis"/><text x="480" y="573" text-anchor="middle" class="label">机尾 / −X</text>
+  <text x="480" y="620" text-anchor="middle" class="small">此图标注位置，转向需单独检查</text>
+</svg>

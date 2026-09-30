@@ -1,437 +1,278 @@
-# 06 · ROS 2 控制
+# 05 · ROS 2 控制
 
-Open32Drone ROS 2 包在 MAVROS 之上提供一套接近无人车的精简接口，适合教学、实验和
-后续集群开发。它不依赖 QGC；同一台 ROS 主机上的多个 MAVROS 进程不能绑定同一个
-UDP 端口。Android 和 ROS 可以位于同一局域网，但同一时刻只能有一个控制端占用同一架飞机。
+飞机能稳定起降后，就可以接入 ROS 2，用程序读取 IMU、距离、电池和里程计数据，发送起飞、降落、速度和位置命令。这一章先检查连接，再用键盘飞一次；之后运行起降测试程序，学习直接发送速度和位置目标。
 
-ROS 包清单版本是 `0.1.0`。Open32Drone 固件、Android 和
-ROS 2 应从同一个源码版本构建。
+## 5.1 准备 ROS 电脑
 
-**命令应答与运动状态：** 命令成功表示收到飞控真实应答；速度控制仍须等 AUTO 模式确认后才开始。
-`fresh local position is required` 表示 ROS 位置消息缺失或超过 0.5 秒未更新，
-不等于机载 ToF 坏了。预热被拒会在激活期限内重试；若仍失败，不要反复发送移动命令，
-先降落，再保留启动日志以及飞机命名空间下的 `offboard/status`、
-`UAS1/local_position/pose`、`UAS1/setpoint_raw/local` 数据。不要调大保护超时或修改 PID
-来掩盖指令流缺失。
-
-制作离线仿真模型时，先看 [URDF / USD 模型导出](07-rl.md)。
-下面的连接和控制步骤面向真机；模型指南尚未给当前 ROS 包增加仿真后端。
-
-第一次使用 ROS 只做下面五件事：
-
-1. 普通遥控或 Android 首飞已经通过，并关闭 Android 控制端；
-2. ROS 电脑直连飞机热点，或与 STA 模式飞机连接同一个路由器；
-3. 按第 2 节安装，在一个终端按第 3 节启动；
-4. 在另一个终端确认 `/open32drone/connected` 为 `true`；
-5. 第 4–5 节先作为参考，直接跳到第 6 节，只执行一次“起飞 → 悬停 → 降落”。
-
-单机流程通过以前不用阅读第 5 节多机配置，也不要同时打开 Android、ROS 和其他
-MAVLink 控制端。
-
-## 1. 环境要求
-
-- 已安装 ROS 2、`colcon` 和 MAVROS；
-- 主机直连飞机 AP，或者与已经配置 STA 的飞机连接同一个可信路由器；
-- ROS 主机可以访问所选的飞机 IPv4 地址；
-- 关闭 Android 和其他 MAVLink 客户端；
-- 安装和台架检查期间必须拆桨。
-
-启动 ROS 前先确认网络：
+推荐使用 Ubuntu 24.04 与 ROS 2 Jazzy。先按 [ROS 2 官方安装说明](https://docs.ros.org/en/jazzy/Installation/Ubuntu-Install-Debs.html)安装 Desktop 版本，再安装 MAVROS 和构建工具：
 
 ```bash
-ping -c 3 192.168.4.1  # 路由器模式替换为飞机的 STA 地址
+sudo apt update
+sudo apt install ros-jazzy-mavros ros-jazzy-mavros-extras \
+  python3-colcon-common-extensions python3-rosdep
+sudo ros2 run mavros install_geographiclib_datasets.sh
 ```
 
-## 2. 安装
-
-使用仓库 `software/ros2/` 目录，或同一构建套件中的匹配 ROS 2 源码包：
+把仓库中的 ROS 包放进工作空间：
 
 ```bash
+source /opt/ros/jazzy/setup.bash
 mkdir -p ~/osdrone_ws/src
-cp -a /path/to/open32drone/software/ros2 ~/osdrone_ws/src/open32drone_driver
+cp -a /path/to/osrdrone/ros2 ~/osdrone_ws/src/open32drone_driver
 cd ~/osdrone_ws
 rosdep install --from-paths src --ignore-src -r -y
 colcon build --symlink-install
 source install/setup.bash
 ```
 
-每次打开新终端都要加载工作空间：
+以后每次打开终端先执行：
 
 ```bash
+source /opt/ros/jazzy/setup.bash
 source ~/osdrone_ws/install/setup.bash
 ```
 
-### 最小 ROS 开发闭环
+## 5.2 连接飞机
 
-自己的 ROS 程序只使用本包提供的 `/open32drone/cmd_vel`、`/open32drone/odom`、命令
-话题或服务，不要绕过驱动直接重复实现 MAVLink 起飞/降落状态机。按上面的复制方式
-安装时，后续直接修改 `~/osdrone_ws/src/open32drone_driver/` 中的源码，然后执行：
+推荐先按[接入路由器 Wi-Fi](./04-firmware-flight.md#router)完成 STA 配置，
+让飞机和 ROS 2 电脑处于同一个局域网。使用飞机串口的 `wifi` 命令读取 DHCP 地址，并在
+路由器中设置 DHCP 地址保留。在准备启动驱动的终端输入 `wifi` 实际显示的飞机地址，先测试：
 
 ```bash
-cd ~/osdrone_ws
-colcon build --symlink-install --packages-select open32drone_driver
-source install/setup.bash
+printf '请输入 wifi 命令显示的飞机 IP：'
+read -r AIRCRAFT_IP
+ping -c 3 "$AIRCRAFT_IP"
 ```
 
-新增 Python 节点放入工作空间源码的 `open32drone_driver/` Python 包，并在 `setup.py`
-注册入口；新增启动参数同步修改 `launch/`。第 3 节启动成功后，在第二个终端拆桨运行
-`ros2 run open32drone_driver bench_test --duration 5`，再用第 6 节的单次起降验证。只有
-共享 MAVLink 协议发生变化时，才需要同步修改固件、Android 和协议契约测试。更完整
-的构建与评审规则见[开发指南](../reference/source-build.zh-CN.md)。
+在同一个终端启动完整驱动，并把该地址传给 `aircraft_ip`：
 
-## 3. 启动并证明链路真实连接
+```bash
+ros2 launch open32drone_driver open32drone.launch.py \
+  aircraft_ip:="$AIRCRAFT_IP"
+```
 
-`connected=true` 只证明心跳连接；起飞前还要确认 IMU、odom 和测距持续更新。
-自定义启动文件时，不要给 `mavros_node` 添加全局 `name="mavros"`：这会同时重命名
-内部插件，破坏话题路径和插件配置。官方启动文件已将 ToF 输出映射至
-`UAS1/distance_sensor/tof`，供接口桥发布 `range/downward`。
-
-起飞命令先验证只读 `status` 请求能完整往返；若超时，先排查命令链路，不连续重发起飞。
-录制 ROS bag 时，必须先正常停止录制，再读取 SQLite 数据库；飞行中查看实时话题，
-不要直接查询正在写入的数据库。
-
-直连 AP 模式下启动完整控制栈：
+首次配置或路由器不可用时，也可以让电脑直接连接飞机热点 `open32drone`。直连 AP 的飞机
+地址固定为 `192.168.4.1`，此时使用默认启动命令：
 
 ```bash
 ros2 launch open32drone_driver open32drone.launch.py
 ```
 
-默认 MAVROS 地址是：
+两种网络方式都使用 MAVLink UDP `14550`。开始 ROS 控制前关闭 Android 控制连接；两者
+可以连接同一个路由器，但不能同时控制同一架飞机。
 
-```text
-udp://0.0.0.0:14550@192.168.4.1:14550
-```
-
-使用路由器 STA 时，把固件 `wifi` 命令打印的 DHCP 地址传给启动文件：
+第二个终端查看状态：
 
 ```bash
-ros2 launch open32drone_driver open32drone.launch.py \
-  aircraft_ip:=192.168.31.42
+ros2 run open32drone_driver control status
+ros2 topic echo /open32drone/connected --once
 ```
 
-高级 MAVROS 路由仍可直接覆盖 `fcu_url:=...`。建议在路由器中保留飞机 DHCP
-地址，让每架飞机的地址可预测。Android 和 ROS 可以位于同一局域网，但同一时刻
-只能有一个 MAVLink 控制端。
+`connected` 为 `true` 后，再看实时传感器：
 
-在第二个终端检查实时数据，不能只看话题名字：
+```bash
+ros2 topic hz /open32drone/imu/data
+ros2 topic echo /open32drone/range/downward --once
+ros2 topic echo /open32drone/battery --once
+ros2 topic echo /open32drone/odom --once
+```
+
+## 5.3 从状态走到控制
+
+连接后，飞机把状态发给电脑，电脑把控制目标发给飞机。键盘程序和后面的 ROS 话题命令使用同一套驱动，都要经过飞控的起降检查和保护逻辑。
+
+[![ROS 2 数据与控制方向](/media/figures/ros-dataflow.svg)](/media/figures/ros-dataflow.svg)
+
+| 要回答的问题 | 先看哪个话题 | 消息类型与含义 |
+| --- | --- | --- |
+| 链路还在吗？ | `/open32drone/connected`、`/open32drone/state` | `Bool` 心跳；`mavros_msgs/State` 的解锁和模式 |
+| 飞机在哪、朝哪？ | `/open32drone/pose`、`/open32drone/odom` | `PoseStamped` 位姿；`Odometry` 位姿和速度 |
+| 测距和电压是否更新？ | `/open32drone/range/downward`、`/open32drone/battery` | `Range` 向下 ToF；`BatteryState` 电压 |
+| 起飞请求有没有被接受？ | `/open32drone/command/result`、`/open32drone/flight/status` | 命令应答与后续飞行状态，是两个阶段 |
+| 电脑取得移动控制权了吗？ | `/open32drone/offboard/status`、`/open32drone/rc/status` | Offboard 阶段与 ROS/物理遥控器控制权 |
+| 下一步往哪里动？ | `/open32drone/cmd_vel`、`/open32drone/goal_pose` | `Twist` 机体系速度；`PoseStamped` 里程计系绝对位置 |
+
+这里有两个坐标系，不能混用。`cmd_vel` 的 `x` 指机头前方、`y` 指机体左侧、`z` 指上方；`goal_pose` 的坐标属于 `open32drone/odom`，原点由本次里程计决定。第 5.8 节会用图解释这一区别。TF 树把 `open32drone/odom → open32drone/base_link → open32drone/tof_link` 连起来。话题能在列表中出现，只能说明 ROS 发现了接口；起飞前仍要看到状态、位置和测距持续更新。
+
+## 5.4 用键盘控制无人机
+
+先用遥控器或 Android 完成首飞，并确认前面的话题持续更新，再尝试 ROS 控制。把飞机放在飞行区中央，上电，等陀螺校准完成。
+
+键盘程序由你逐步操作起飞、移动和降落。它是独立节点，**不会** 随启动文件自动运行。先关闭 Android、其他 ROS 控制节点，以及持续发布 `cmd_vel` 的终端，保留第一个终端中的驱动。在第二个终端观察 `/open32drone/state` 和 `/open32drone/offboard/status`，第三个交互终端运行：
 
 ```bash
 source ~/osdrone_ws/install/setup.bash
-ros2 run open32drone_driver control status
-ros2 topic echo /open32drone/connected --once
-ros2 topic hz /open32drone/imu/data
-ros2 topic echo /open32drone/range/downward --once
+ros2 run open32drone_driver keyboard --robot-name open32drone --height 0.65
 ```
 
-`/open32drone/connected` 必须为 `true`，IMU 必须持续更新，向下距离必须有新鲜
-TF-0850 数据包。话题出现在列表中并不能证明 MAVLink 已连接。
+每按一步，先看提示和飞机状态，确认完成后再按下一个键：
 
-## 4. 对外接口
+1. 地面按 `t`。程序检查连接、位置与 ToF 数据，停止 ROS RC 流，只发送一次起飞。收到应答后，仍要等飞机爬升、稳定并回到定点；看到“起飞完成并进入定点”才继续。
+2. 按 `o`。程序请求 Offboard 并等待 `phase=ACTIVE`；预热和模式切换期间，移动键不会提前生效。如果物理遥控器正在占用控制权、状态过期或起飞未完成，程序会拒绝。
+3. 默认是 `v` 速度模式。轻按一次 `w`，观察机头方向的一小段前进和随后的停住；再依次试 `s/a/d`。`i/k` 是升降，`j/l` 是左/右偏航。每按一次只发送约 `0.30 s` 的速度脉冲，默认水平 `0.20 m/s`、垂直 `0.15 m/s`、偏航 `0.40 rad/s`；松键不需要终端报告，程序会发零速度并由现有看门狗捕获当前位置。
+4. 按 `p` 切到位置模式。此时 `w/s/a/d/i/k` 每次以 **刚收到的当前位置和机头朝向** 生成一个 `0.20 m` 步进，`j/l` 不执行偏航。程序给出的是 `open32drone/odom` 中的绝对目标；反复按键不会把未到达的旧目标累加成远处航点。
+5. 按空格停止新运动并保持当前位置。结束实验按 `g` 降落，看到上锁和落地反馈；再按 `q` 退出。`q` 只释放 Offboard、退出程序，**不是降落键**。
 
-### 遥测
+程序会检查飞机状态，条件不满足时会拒绝按键操作。遇到拒绝提示，先查看提示内容和上述状态话题，不要再开一个 `ros2 topic pub -r` 同时发送指令。`--horizontal`、`--vertical`、`--yaw-rate`、`--step` 和 `--pulse` 可以调整动作参数，实际值仍受驱动和飞控限幅；第一次练习保持默认值即可。
 
-| 话题 | 类型 | 含义 |
-|---|---|---|
-| `/open32drone/connected` | `std_msgs/Bool` | 实时心跳连接状态 |
-| `/open32drone/state` | `mavros_msgs/State` | 连接、解锁和模式 |
-| `/open32drone/imu/data` | `sensor_msgs/Imu` | 姿态和滤波后 IMU |
-| `/open32drone/imu/data_raw` | `sensor_msgs/Imu` | MAVROS 原始 IMU 接口 |
-| `/open32drone/odom` | `nav_msgs/Odometry` | 本地位置和速度 |
-| `/open32drone/pose` | `geometry_msgs/PoseStamped` | 本地位姿 |
-| `/open32drone/range/downward` | `sensor_msgs/Range` | 向下 TF-0850 距离 |
-| `/open32drone/battery` | `sensor_msgs/BatteryState` | 实测电压；电流和剩余百分比保持未知；辅助推力补偿由固件负责 |
-| `/open32drone/rc/in` | `mavros_msgs/RCIn` | 物理 SBUS 通道 |
-| `/open32drone/rc/channels` | `std_msgs/UInt16MultiArray` | 简单数组形式的 RC 通道 |
-| `/open32drone/diagnostics` | `diagnostic_msgs/DiagnosticArray` | 连接诊断 |
-| `/tf` | TF | `open32drone/odom -> open32drone/base_link` |
+## 5.5 让程序验证完整起降
 
-桥接节点把关键传感器重新发布为 Reliable QoS，RViz 和 `rqt` 不需要再适配 MAVROS
-的 sensor-data QoS。
-
-### 控制
-
-| 接口 | 含义 |
-|---|---|
-| `/open32drone/command` | 单次生命周期文本命令 |
-| `/open32drone/command/result` | 与原命令匹配的 JSON 结果 |
-| `/open32drone/cmd_vel` | 机体系速度：`x` 前、`y` 左、`z` 上 |
-| `/open32drone/goal_pose` | `open32drone/odom` 中的绝对位置目标 |
-| `/open32drone/rc/override` | SBUS 风格原始通道测试输入 |
-
-同时提供简短服务：
-
-```text
-/open32drone/arm  /open32drone/disarm  /open32drone/takeoff
-/open32drone/land  /open32drone/emergency_stop
-```
-
-`/open32drone/takeoff` 服务使用 `flight_manager.takeoff_height` 参数；需要明确指定高度时，使用
-CLI 或文本话题。
-
-## 5. 高级：同一局域网控制多架飞机
-
-多机必须使用路由器 STA 模式。每架飞机直连 AP 时默认都是同一个
-`192.168.4.1`，无法在同一局域网里区分多架飞机。对外话题、服务、MAVROS 内部接口和
-TF 由以下配置隔离：
-
-| 配置 | 飞机 1 | 飞机 2 | 作用 |
-|---|---:|---:|---|
-| 飞机 STA 地址 | `192.168.31.101` | `192.168.31.102` | 找到具体物理飞机 |
-| 固件 `MAV_SYS_ID` | `1` | `2` | 区分 MAVLink 系统 |
-| `robot_name` / TF 前缀 | `drone01` | `drone02` | 隔离 ROS 名称和坐标系 |
-| ROS 主机 UDP 本地端口 | `14551` | `14552` | 两套 MAVROS 在同一主机运行时避免本机套接字冲突 |
-
-先通过每架飞机的本地串口 CLI 设置一次系统 ID，重启后用 `p MAV_SYS_ID` 核对：
-
-```text
-p MAV_SYS_ID 1
-```
-
-第二架必须使用不同值。建议在路由器里为每架飞机保留固定 DHCP 地址，不能用可能变化的
-临时地址识别飞机。
-
-中央 ROS 程序需要同时发现两架飞机时，两套进程使用相同的 `ROS_DOMAIN_ID`。下面示例
-让两套 MAVROS 运行在同一主机，所以本地 UDP 端口必须不同：
-
-```bash
-export ROS_DOMAIN_ID=32
-
-# 终端 1
-ros2 launch open32drone_driver open32drone.launch.py \
-  robot_name:=drone01 frame_prefix:=drone01 \
-  aircraft_ip:=192.168.31.101 mav_sys_id:=1 local_udp_port:=14551
-
-# 终端 2
-ros2 launch open32drone_driver open32drone.launch.py \
-  robot_name:=drone02 frame_prefix:=drone02 \
-  aircraft_ip:=192.168.31.102 mav_sys_id:=2 local_udp_port:=14552
-```
-
-所有需要看到该集群的终端和中央控制进程都必须导出同一个 Domain ID。
-
-此时同一 Domain 中的每台 ROS 电脑都会在话题列表中看到两套名称，这是正常现象：
-
-```text
-/drone01/state       /drone02/state
-/drone01/cmd_vel     /drone02/cmd_vel
-/drone01/odom        /drone02/odom
-```
-
-`ros2 topic list` 显示的是 DDS 发现结果，不代表获得了控制权。中央程序正是依靠同时
-看到它们来做集群；命名空间保证命令不会串到另一架飞机。发布到
-`/drone01/cmd_vel` 的命令不会进入 `/drone02/cmd_vel`。辅助命令必须显式选择目标：
-
-```bash
-ros2 run open32drone_driver control --robot-name drone01 status
-ros2 run open32drone_driver control --robot-name drone02 takeoff --height 0.65
-ros2 run open32drone_driver bench_test --robot-name drone01 --duration 5
-```
-
-只有两个实验完全不应互相发现时才使用不同 `ROS_DOMAIN_ID`。如果没有专门的 DDS/域桥，
-不同域不适合单个中央集群控制器。多机常规隔离依靠命名空间，Domain ID 是额外的实验室边界。
-
-如果每架飞机各用一台独立伴随计算机，它们可以都使用本机 UDP 端口 `14550`，因为不同
-主机上的套接字不会冲突；飞机 IP、固件 `MAV_SYS_ID`、`robot_name` 和 TF 前缀仍必须
-对应正确的飞机。以后增加 ROS 图像节点时也必须放在该飞机命名空间下，例如
-`/drone01/camera/image_raw`。
-
-后台进程管理也按飞机隔离：
-
-```bash
-ros2 run open32drone_driver system start \
-  --robot-name drone01 --aircraft-ip 192.168.31.101 \
-  --mav-sys-id 1 --local-udp-port 14551
-ros2 run open32drone_driver system status --robot-name drone01
-ros2 run open32drone_driver system stop --robot-name drone01
-```
-
-报告或停止已保存 PID 前，工具会核对当前进程命令是否仍属于该飞机命名空间。主机
-重启后若旧 PID 被其他进程复用，工具会忽略旧记录，不会向无关进程发送信号。
-
-## 6. 正常飞行流程
-
-ROS 自动起飞默认进入定点。无需单独发送 `arm`：`takeoff` 由固件统一完成预检、
-解锁、爬升和定点交接；结果不受命令前飞控显示的待机模式影响。
-
-### 最小起飞—悬停—降落
-
-飞机放在空旷安全区并有人监护：
-
-```bash
-ros2 run open32drone_driver control status
-ros2 run open32drone_driver control takeoff --height 0.65
-ros2 topic echo /open32drone/odom
-ros2 run open32drone_driver control land
-```
-
-收到起飞成功结果后再发送移动命令。降落后确认 `armed: false` 和落地状态。
-
-### 速度控制
-
-辅助命令会进入 Offboard、持续发送设定值、结束命令并要求飞机捕获当前位置：
-
-```bash
-# 前、后、左、右；每次 0.25 m/s，持续 1.5 s。
-ros2 run open32drone_driver control velocity  0.25  0.00 0.00 --duration 1.5
-ros2 run open32drone_driver control velocity -0.25  0.00 0.00 --duration 1.5
-ros2 run open32drone_driver control velocity  0.00  0.25 0.00 --duration 1.5
-ros2 run open32drone_driver control velocity  0.00 -0.25 0.00 --duration 1.5
-
-# 上升、下降、原地旋转。
-ros2 run open32drone_driver control velocity 0 0  0.20 --duration 1.0
-ros2 run open32drone_driver control velocity 0 0 -0.20 --duration 1.0
-ros2 run open32drone_driver control velocity 0 0 0 --yaw-rate 0.50 --duration 2.0
-```
-
-ROS 节点把水平速度向量总值限制为 `0.70 m/s`，与固件默认 `POS_STICK_V` 一致；固件端
-仍会再次执行最终限幅。垂直速度保持 `0.35 m/s`，偏航角速度保持 `1.0 rad/s`。
-超过 `0.50 s` 没有新命令时，看门狗捕获当前位置。
-
-直接发布 `/open32drone/cmd_vel` 时必须连续发送，通常使用 20 Hz：
-
-```bash
-ros2 topic pub -r 20 /open32drone/cmd_vel geometry_msgs/msg/Twist \
-  '{linear: {x: 0.20, y: 0.0, z: 0.0}, angular: {z: 0.0}}'
-```
-
-按 `Ctrl-C` 停止。不能只发一帧速度后期待它一直生效。
-
-### 位置控制
-
-```bash
-ros2 run open32drone_driver control position 0.30 0.00 0.65
-```
-
-这里是当前 `open32drone/odom` 坐标系中的绝对坐标，不是相对飞机的位移，发送前先看
-`/open32drone/odom`。
-为保证教学测试安全，新水平目标被限制在当前位置 `0.80 m` 内，接近速度不超过
-`0.15 m/s`。
-
-## 7. 文本命令与服务
-
-文本话题适合写教学脚本：
-
-```bash
-ros2 topic pub --once /open32drone/command std_msgs/msg/String \
-  '{data: "takeoff 0.65"}'
-ros2 topic echo /open32drone/command/result
-ros2 topic pub --once /open32drone/command std_msgs/msg/String '{data: "land"}'
-```
-
-支持的文本命令：
-
-```text
-status
-arm
-disarm
-emergency_stop
-takeoff [height_m]
-land
-mode stabilize|altitude|position
-offboard start|stop
-rc start|stop
-```
-
-简短服务示例：
-
-```bash
-ros2 service call /open32drone/takeoff std_srvs/srv/Trigger '{}'
-ros2 service call /open32drone/land std_srvs/srv/Trigger '{}'
-ros2 service call /open32drone/emergency_stop std_srvs/srv/Trigger '{}'
-```
-
-生命周期命令只发送一次，并等待对应结果。驱动不会靠重复起飞或降落来掩盖丢包或
-固件拒绝。
-
-## 8. 原始 RC 通道测试
-
-这是协议测试接口，不是推荐的自主控制接口：
-
-```bash
-ros2 run open32drone_driver control rc \
-  --roll 1023 --pitch 1023 --throttle 1100 --yaw 1023 --duration 1.0
-```
-
-数值使用 `[240, 1807]` 的 SBUS 范围。桥接节点换算为 MAVLink `MANUAL_CONTROL`，
-要求数据持续新鲜；命令结束后显式停止数据流并回到定点。新鲜的物理 SBUS 操作优先，
-此时 ROS RC 启动会被拒绝。物理遥控器急停可以作为有人监护时的独立安全手段，但不应
-成为正常 ROS 流程的一部分。
-
-查看物理遥控通道：
-
-```bash
-ros2 topic echo /open32drone/rc/in
-ros2 topic echo /open32drone/rc/channels
-```
-
-## 9. RViz 与 TF
-
-```bash
-ros2 launch open32drone_driver open32drone.launch.py use_rviz:=true
-```
-
-默认固定坐标系是 `open32drone/odom`，桥接节点发布
-`open32drone/odom -> open32drone/base_link`。多机启动时使用各自 `frame_prefix`，例如
-`drone01/odom -> drone01/base_link`。默认 RViz 配置显示里程计、
-位姿、TF 和向下距离。当前 ROS 包不转发实验性的 HTTP MJPEG，也不提供
-`camera_info`。OpenCV 可以直接打开 `http://<飞机地址>/stream`，但固件只允许一个
-图传观看端；ROS 拥有 MAVLink 控制时必须关闭 Android 控制端。
-
-## 10. 验收脚本
-
-正常验收时，飞机下方不要有人脚或移动物体，否则会改变 ToF 距离和光流观测。
-刻意遮挡传感器的测试应单独记录，不用这类片段调整正常悬停参数。
-
-拆桨台架：
-
-```bash
-ros2 run open32drone_driver bench_test --duration 5
-```
-
-只有确实安装并校准物理遥控器时才加 `--require-rc`；只有配置电压采样硬件时才加
-`--require-battery`。
-
-有人监护的飞行测试：
+接下来让程序完成一次起降。先确认飞机已经落地、上锁，并退出键盘程序，再运行下面的命令。实验过程中仍需要有人在现场观察：
 
 ```bash
 ros2 run open32drone_driver flight_test --height 0.65 --hover 5
 ```
 
-默认 `--pattern hover` 只起飞、悬停、降落，不横移。开始悬停前，水平/高度误差必须
-在 0.10 m 内，水平和垂直速度均不超过 0.08 m/s，并连续保持 1 秒。
-随后才计入 `--hover` 时间；不是刚进入高度范围就宣布悬停。
+脚本先检查只读命令能否收到回复，再请求一次起飞。**起飞应答只表示飞控接受了命令**，还要等位置和速度持续稳定，程序才开始计时悬停 5 秒。降落后也要继续确认接地和上锁，因此命令发出、收到应答和动作完成是分别检查的。
 
-位置到点测试（有人监护，留出移动空间）：
+单次起降通过后，可以运行下面的测试，让飞机依次前进、回位、左移、回位，并根据反馈检查是否到达目标：
 
 ```bash
-ros2 run open32drone_driver flight_test --pattern cross --height 0.65 --distance 0.4 --hover 5 --output flight-cross.json
+ros2 run open32drone_driver flight_test --pattern cross \
+  --height 0.65 --distance 0.4 --hover 5 --output flight-cross.json
 ```
 
-流程：稳定起飞 → 悬停 → 前方 0.4 m → 回原点 → 左侧 0.4 m → 回原点 → 悬停 → 降落。
-机头方向在初始悬停结束时固定为本轮参考，目标点使用固定里程计坐标，不跟着漂移移动。
-每个点都要求“到位且停稳连续 1 秒”，再观察 1 秒才进入下一点；20 秒仍不到位就失败并
-请求降落，不改目标、不调参数、不强行继续。`--height-tolerance` 是测试的 XY/Z 验收
-误差（默认 0.10 m），不是飞控参数。`--distance` 范围 0.1–0.7 m；这不改变日常控制限制。
-`--output` 保存阶段时间和位置原始样本；指定文件已存在时，起飞前直接报错，避免覆盖证据。
+每到一个目标都要停稳，才会进入下一步。未能到位时，测试会报告失败并请求降落，不会只等一个固定的 `sleep` 时长就判定到达。默认要求水平和高度误差在 `0.10 m` 内、水平和垂直速度不超过 `0.08 m/s`，连续保持 1 秒；单点等待上限为 20 秒。`--output` 保存阶段和轨迹，不覆盖已有文件。
 
-需要检查连续速度控制时，使用定时速度命令；它与位置到点测试不是同一项：
+需要立即停桨时，物理遥控器急停仍是独立手段；ROS 也提供 `ros2 run open32drone_driver control emergency-stop`。急停不会执行正常下降，只用于已经无法安全降落的情况。普通 `disarm` 只允许在确认地面状态后执行，不能代替 `land`；命令 ACK 也不能代替实际的未武装反馈。
+
+偏航角速度按 ROS 习惯：`--yaw-rate` 正值表示逆时针，负值表示顺时针。Offboard 控制结束后，先执行 `offboard stop`，再切换到摇杆控制。飞行时保持飞机下方没有人脚或移动物体，遮挡传感器的实验另行安排。
+
+## 5.6 直接发送速度指令
+
+第 5.4 节按 `w` 时，键盘程序会短暂发送机体系 `x` 方向的速度，然后归零。用 `control velocity` 可以直接指定速度和持续时间，之后再尝试从自己的 ROS 节点发布消息。
+
+先确认上一轮实验已经落地、键盘程序已经退出，再开始这次命令行实验。`control takeoff` 收到起飞应答后，还要观察 `/state` 是否已进入 `CMODE(5)` 或 `POS_HOLD`，并确认高度稳定：
 
 ```bash
-ros2 run open32drone_driver control velocity 0.15 0.00 0.00 --duration 10
+ros2 run open32drone_driver control status
+ros2 run open32drone_driver control takeoff --height 0.65
+# 观察 /open32drone/state 与 /open32drone/pose，确认定点和高度。
 ```
 
-该命令只在飞机已起飞后执行，按约 20 Hz 发速度，10 秒后发零速度；不保证刚好移动
-1.5 m，也不保证已经刹停。Offboard 状态过期、失去激活状态或上锁会报失败，而不是仅凭
-计时结束返回成功。ROS 收到 AUTO 的命令 ACK 后，必须再收到实际 AUTO 模式反馈才显示
-ACTIVE。测试不重试起飞；失败后的降落请求也不会循环重发。上述数据只验证机载里程计
-估计，不能替代外部定位精度测量。
+`control velocity` 会准备 Offboard、等待激活、按给定时长连续发送设定值，结束时发零速度。先执行一条较小的前进命令，确认停住，再执行左移：
 
-## 11. 无响应时
+```bash
+ros2 run open32drone_driver control velocity 0.15 0.00 0.00 --duration 1.5
+ros2 run open32drone_driver control velocity 0.00 0.15 0.00 --duration 1.5
+```
 
-1. 确认 `ping <飞机地址>` 成功，并核对启动参数 `aircraft_ip`；
-2. ROS 需要接管该飞机时关闭 Android，并确认没有其他进程占用本次启动的
-   `local_udp_port`；
-3. 看 `control status`，不要把话题列表当作连接证据；
-4. 查看 `/open32drone/command/result` 和 MAVROS `statustext` 中的预检拒绝原因；
-5. ROS 需要控制时停止物理 SBUS 操作；
-6. 修改固件参数前先阅读[故障排查](05-tuning.md)。
+偏航使用 `--yaw-rate`；负数分别表示后、右、下或右转。第一次练习每次只动一个轴。水平速度总值被 ROS 限制在 `0.70 m/s`，垂直速度不超过 `0.35 m/s`，偏航角速度不超过 `1.0 rad/s`，飞控还会做最终限幅。
+
+四条命令可以组成一个小方形。每条之后先观察飞机是否重新停稳；`0.15 × 1.5 ≈ 0.225 m` 只是理想积分距离，实际轨迹会受加减速与位置捕获影响：
+
+```bash
+ros2 run open32drone_driver control velocity  0.15  0.00 0.00 --duration 1.5
+ros2 run open32drone_driver control velocity  0.00  0.15 0.00 --duration 1.5
+ros2 run open32drone_driver control velocity -0.15  0.00 0.00 --duration 1.5
+ros2 run open32drone_driver control velocity  0.00 -0.15 0.00 --duration 1.5
+ros2 run open32drone_driver control land
+```
+
+自己的 ROS 节点向 `/open32drone/cmd_vel` 发布速度时，使用 `geometry_msgs/msg/Twist` 消息，按约 20 Hz 连续发送；**只发一帧不会持续移动**。停止发布超过 `0.50 s`，Offboard 看门狗会捕获当前位置。键盘短脉冲、`control velocity` 定时命令和连续发布的 `Twist`，每次只能选一种来控制同一架飞机。下一节练习直接通过话题发送速度指令。
+
+## 5.7 从键盘到 ROS 话题控制
+
+前面按键盘的 `t`、`o`、`w` 和 `g`，分别完成起飞、取得移动控制权、向前移动和降落。现在退出键盘程序，在 **新的一次实验** 中直接使用相同的 ROS 话题：
+
+| 键盘动作 | 对应话题 | 发送方式 |
+| --- | --- | --- |
+| `t` 起飞、`o` 进入 Offboard、`g` 降落 | `/open32drone/command` | 每步发送一次，等待实际状态变化 |
+| `w` 向机头前方移动 | `/open32drone/cmd_vel` | 连续发布速度，停止后归零 |
+| `p` 模式给出一个位置步进 | `/open32drone/goal_pose` | 先从当前位姿计算绝对目标；下一节再讲 |
+
+`/open32drone/command` 使用 `std_msgs/msg/String`。观察 `/open32drone/command/result` 得到命令应答，再观察 `/state`、`/pose` 和 `/offboard/status` 确认动作完成。保留驱动终端，在另一个终端逐项观察：
+
+```bash
+# 观察终端：以下 echo 每次单独运行，Ctrl-C 后看下一项。
+ros2 topic echo /open32drone/command/result
+ros2 topic echo /open32drone/state
+ros2 topic echo /open32drone/offboard/status
+ros2 topic echo /open32drone/pose
+```
+
+```bash
+# 发送终端：一条一条执行，每步核对观察终端。
+ros2 topic pub --once /open32drone/command std_msgs/msg/String '{data: "rc stop"}'
+ros2 topic pub --once /open32drone/command std_msgs/msg/String '{data: "takeoff 0.65"}'
+# 等定点模式和高度稳定；不要在自动起飞的 AUTO 阶段抢先发移动指令。
+ros2 topic pub --once /open32drone/command std_msgs/msg/String '{data: "offboard start"}'
+# 等 /offboard/status 为 phase=ACTIVE。
+```
+
+下面用 `Twist` 发送沿机头方向 `0.10 m/s` 的速度。命令会持续发布消息，按 `Ctrl-C` 结束；结束后观察飞机是否捕获当前位置：
+
+```bash
+ros2 topic pub -r 20 /open32drone/cmd_vel geometry_msgs/msg/Twist \
+  '{linear: {x: 0.10, y: 0.0, z: 0.0}, angular: {z: 0.0}}'
+```
+
+结束时先释放 Offboard，看到 `phase=IDLE` 且飞控回到定点，再请求降落；最终检查 `/state` 中 `armed=false` 和 `/flight/status` 中 `landed_state=1`。
+
+```bash
+ros2 topic pub --once /open32drone/command std_msgs/msg/String '{data: "offboard stop"}'
+# 等 /offboard/status 为 phase=IDLE，/state 为 CMODE(5) 或 POS_HOLD。
+ros2 topic pub --once /open32drone/command std_msgs/msg/String '{data: "land"}'
+```
+
+写自己的节点时，也要处理这些等待条件、超时和失败情况。确认飞机完成动作后，再进入下一步。
+
+## 5.8 位置控制：从当前位置和朝向算目标
+
+速度话题说的是“沿机头方向移动多快”，位置话题说的是“飞到里程计中的哪个坐标”。所以不能把“向前 `0.20 m`”直接写成 `goal_pose.x = 0.20`。先看同一位置的两种机头朝向；图中只画水平面，高度都保持 `0.65 m`：
+
+![里程计坐标系中，机头朝向改变后，同样向前 0.20 米对应不同的绝对位置目标](/media/figures/ros-position-frames.svg)
+
+图中灰色坐标轴固定在本次 `open32drone/odom`，蓝色箭头始终指向机头前方。左图机头朝 `+X`，从 `(1.00, -0.40)` 前进 `0.20 m` 得到 `(1.20, -0.40)`；右图机头左转 `90°` 后，同样前进 `0.20 m` 得到 `(1.00, -0.20)`。真实飞行的里程计原点和朝向由当次估计决定，图中数字只是计算示例，**不能直接复制为真机目标**。
+
+做位置实验前，确认上一次已经落地，并退出控制程序。按第 5.7 节重新起飞，等待飞机进入定点且 `phase=ACTIVE`，然后读取**这次飞行最新的里程计和朝向**：
+
+```bash
+ros2 topic echo /open32drone/odom --once
+```
+
+设当前位置为 `(x_now, y_now, z_now)`、偏航角为 `ψ`，想沿机体前/左移动 `(dx, dy)`，把它转换成里程计中的**绝对目标**：
+
+```text
+x_goal = x_now + cos(ψ)·dx − sin(ψ)·dy
+y_goal = y_now + sin(ψ)·dx + cos(ψ)·dy
+z_goal = z_now                 # 水平移动时保持当前高度
+```
+
+`/odom` 的朝向字段是四元数；自己的节点需要从中换算偏航角。初次理解方向时，可回看第 5.4 节键盘 `p` 模式给出的目标，再与图中的方向关系核对。
+
+键盘 `p` 模式也是这样计算的：每次按键都从最新位姿算出一个目标，不会在上一次尚未到达的目标上继续累加。把自己算出的 `(x_goal, y_goal, z_goal)` 用 `control position` 发送，或发布到 `/open32drone/goal_pose`。下面的数值**仅对应左图的计算示例**，实际实验必须替换为刚观测并计算出的目标：
+
+```bash
+ros2 run open32drone_driver control position 1.20 -0.40 0.65
+
+# 等价的话题形式；与上一条二选一，不要同时发送。
+ros2 topic pub --once /open32drone/goal_pose geometry_msgs/msg/PoseStamped \
+  '{header: {frame_id: "open32drone/odom"}, pose: {position: {x: 1.20, y: -0.40, z: 0.65}, orientation: {w: 1.0}}}'
+```
+
+`frame_id` 必须是 `open32drone/odom`，否则驱动会拒绝。当前驱动只使用 `goal_pose` 的位置字段；示例里的 `orientation.w: 1.0` 是有效四元数的写法，**不会把机头转到世界系 `+X`**。驱动将目标的每个水平坐标限制在距当前位置 `0.80 m` 内，并将接近速度限制在 `0.15 m/s`。下一个目标应在观察当前反馈后再给；要证明“到达且停稳”，使用第 5.5 节的 `flight_test --pattern cross`，不要只靠固定等待时间。
+
+位置实验结束后，按第 5.7 节释放 Offboard、降落并确认上锁。需要查阅消息格式和飞控约定时，见[参数与接口](../reference/firmware.zh-CN.md)。
+
+## 5.9 用 RViz 和 rosbag 检查飞行状态
+
+启动时打开 RViz：
+
+```bash
+ros2 launch open32drone_driver open32drone.launch.py use_rviz:=true
+```
+
+记录一次 ROS 飞行：
+
+```bash
+ros2 bag record \
+  /open32drone/imu/data \
+  /open32drone/range/downward \
+  /open32drone/odom \
+  /open32drone/battery \
+  /open32drone/flight/status \
+  /open32drone/offboard/status
+```
+
+回放时对照指令和实际轨迹，检查高度、电压的变化。[下一章的强化学习](./07-rl.md)会在仿真中训练策略，让它根据当前状态选择下一步动作。

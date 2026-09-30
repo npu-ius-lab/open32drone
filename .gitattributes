@@ -1,6 +1,2 @@
-software/hardware/3d-model/*.3mf binary
-software/hardware/3d-model/*.stp binary
-
-# Preserve bytes used by source identity and release archive checks.
-software/firmware/* text eol=lf
-software/ros2/** text eol=lf
+hardware/3d-model/*.3mf binary
+hardware/3d-model/*.stp binary

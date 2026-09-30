@@ -1,4 +1,4 @@
-# Open32Drone Minimal
+# Open32Drone
 
 <p align="center">
     <img src="img/drone.PNG" alt="Full drone view" />
@@ -11,110 +11,86 @@
   </strong>
 </p>
 
-**Open32Drone** is an open-source micro-UAV platform based on the **ESP32-S3**, designed for research and education, embedded flight-control development, and robotics algorithm validation.
+**Open32Drone** is an open-source micro-drone platform based on the **ESP32-S3**, designed for robotics education, embedded development, and flight-control research.
 
-Open32Drone builds on the open-source [Flix](https://github.com/okalachev/flix/tree/master) project, retaining its lightweight code architecture while adding optical-flow sensing for indoor position and altitude hold. It supports MAVLink and ROS integration and provides a low-cost, extensible micro-aircraft platform for learning UAV control theory, validating swarm algorithms, and researching indoor navigation.
+Inspired by [Flix](https://github.com/okalachev/flix/tree/master), the project uses a compact codebase and adds an optical-flow sensor for indoor position and altitude hold.
+
+Open32Drone supports MAVLink and ROS, giving developers an affordable platform to build and extend a micro drone for learning flight control, testing swarm algorithms and studying indoor navigation.
 
 ---
 
 ## Core Features
 
-### Compute Core: ESP32-S3
+### ESP32-S3 Flight Control
 
-The project uses an **ESP32-S3** series chip as the main controller:
+- **Compact, modular hardware:** A Seeed Studio XIAO ESP32-S3 controller, four 8520 brushed motors, and a 1S battery form the aircraft.
+- **Readable flight-control software:** Code for attitude estimation, stabilization, altitude hold, and position hold.
+- **Practical development tools:** Sensor calibration, adjustable control parameters, persistent settings, and flight logs support testing and algorithm development.
 
-- **Dual-core high clock speed**: 240 MHz processing capability for real-time attitude estimation and communication.
+### Indoor Flight with Optical Flow and ToF
 
-- **Expansion capability**: Supports the ESP-DL instruction set, providing computing resources for lightweight edge-side vision processing.
+An IMU and a TF-0850 optical-flow/ToF module support the following functions:
 
-### Navigation and Perception: Optical Flow + ToF Sensor
+- **Attitude stabilization:** Gyroscope and accelerometer data are used to estimate and control aircraft attitude.
+- **Altitude and position hold:** Downward-facing ranging and optical flow support low-altitude height and horizontal-position control.
+- **Automatic takeoff and landing:** The Android app and ROS 2 interfaces can request takeoff and landing.
 
-A TF-0850 serial optical-flow/ToF module closes a low-altitude relative loop without GPS or an external positioning system:
+### Control Options
 
-- **Indoor position hold**: Estimates horizontal motion using height scaling, delayed angular-rate compensation, outlier rejection, and gated integration.
+| Control option | What it offers |
+| --- | --- |
+| **Android app** | Connect over Wi-Fi, view flight status and battery level, take off and land with on-screen buttons, and fly using virtual sticks. |
+| **SBUS transmitter** | Physical stick control, flight-mode selection, and emergency disarm. |
+| **ROS 2 / MAVROS** | Read IMU, odometry, height, and battery data on a computer, and send velocity, position, takeoff and landing commands. |
 
-- **Indoor altitude hold**: Uses ToF relative height and filtered vertical speed to form an altitude-control loop.
+### Open Hardware
 
-### Communication Ecosystem: MAVLink & ROS & Video
-
-- **QGC support**: Native MAVLink v2 support enables connection to **QGroundControl** for parameter access, state monitoring, arming, and external-control testing.
-
-- **ROS 2 / MAVROS integration**: Provides IMU/odometry/ToF/battery interfaces, `/cmd_vel`, `/goal_pose`, raw RC, TF, RViz2, lifecycle commands, and propeller-off and supervised-flight tests. Multi-aircraft operation is isolated by aircraft IP, MAVLink System ID, local UDP port, ROS namespace, and TF prefix.
-
-- **Bounded background service**: The optional MJPEG stream runs in a separate low-priority core-0 HTTP task, allows one viewer, and does not enter the 300 Hz flight loop. It remains an experimental feature.
-
-### Low Cost and Easy Reproduction
-
-- **General modular design**: Core components are common off-the-shelf modules and are easy to source.
-
-- **Open-source hardware**: The custom PCB project and modular assembly design are provided for direct fabrication and hardware modification.
-
-- **Documentation support**: The tutorial covers carrier-board soldering, vehicle assembly, firmware setup, calibration, and staged flight testing.
+- **3D-printed frame:** Frame models and MakerWorld printing resources are available.
+- **Open PCB project:** The flight-controller baseboard provides power, motor drivers, and module connections; the design is available on JLC Open Hardware.
+- **Modular electronics:** The controller, IMU, optical-flow/ToF module, motors, and battery can be assembled and inspected separately.
+- **USB and OTA updates:** Install firmware over USB, then use the Android app for subsequent OTA updates while the aircraft is on the ground.
 
 ---
 
-## Development Plan
+## Learning and Development
 
-**Open32Drone** aims to build a miniaturized air-ground collaborative robotics ecosystem. Future development plans include:
+After assembly and first flight, use the source code and tutorials to continue learning:
 
-### Edge Perception and Visual Intelligence
-
-The onboard OV3660 and current QVGA MJPEG stream provide the basis for continued visual-perception development:
-
-- **On-device recognition**: QR-code navigation, color-block tracking, face following, and simple gesture control.
-
-- **Vision-assisted navigation**: Combine video feature-point extraction with optical-flow position hold to improve robustness and potentially implement basic visual odometry (VO).
-
-### Swarm Control and Collaborative Evolution
-
-Using the wireless communication capability of the ESP32, the project will expand from single-drone control to multi-drone collaboration:
-
-- **Distributed communication and collaboration**: Build a decentralized swarm network for position sharing and state synchronization between drones.
-
-- **Low-cost swarm algorithm validation**: Lower the hardware barrier for swarm research and support 3-10 micro drones for laboratory-scale experiments such as collaborative search and formation flight.
-
-### Fully Autonomous Indoor Navigation
-
-Close the loop among perception, planning, and control at a very small scale:
-
-- **Micro SLAM**: Explore miniaturized SLAM solutions based on multi-sensor fusion, such as ToF + optical flow + vision.
-
-- **Dynamic obstacle avoidance**: Use multi-directional laser ranging sensors for omnidirectional obstacle avoidance and autonomous path planning in complex indoor environments.
+- **Hardware and embedded systems:** Explore the wiring, sensor interfaces, motor outputs, and firmware main loop.
+- **Feedback control:** Study attitude, altitude, and position control, and use logs to compare the effects of parameter changes.
+- **ROS 2 programming:** Read telemetry and combine movement commands into repeatable experiments.
+- **Simulation and reinforcement learning:** Run independent numerical-control and residual-PPO exercises, with an optional Isaac adapter for separately prepared scenes.
 
 ---
 
-## Documentation
+## Future Development
 
-| Documentation | English | 简体中文 |
-| --- | --- | --- |
-| Project overview | [README](README.md) | [项目说明](README_zh_CN.md) |
-| Build, operation, and development | [Full Tutorial](tutorial.md) | [完整教程](tutorial_zh_CN.md) |
+Building on its flight controller and ROS 2 interfaces, Open32Drone plans to expand into multi-drone coordination, environmental perception, and autonomous flight:
+
+- **Multi-drone coordination and swarm formations:** Explore communication, shared state, and coordinated control for formation flight and collaborative tasks.
+- **SLAM and indoor navigation:** Combine onboard sensors with ROS 2 computing to explore visual-inertial localization, mapping, and indoor navigation.
+- **Autonomous obstacle avoidance and path planning:** Extend environmental perception to explore obstacle detection, local path planning, and autonomous navigation around obstacles.
+
+These are planned development directions. Contributions and experiments in these areas are welcome.
 
 ---
 
-## FAQ
+## Documentation and Resources
 
-**Thrust-to-weight ratio:** 8520 motors with 76 mm propellers can provide about 40 g to 50 g thrust per motor at 3.7 V. The total takeoff weight should be kept within 60 g to 80 g.
+Assembly, firmware installation, calibration, first flight, tuning, ROS 2, and source-build instructions are maintained in the tutorial site.
 
-**Motor shaft diameter:** Make sure the 8520 motor shaft diameter is **1.0 mm**, otherwise the 76 mm propellers cannot be installed.
-
-**Module pin definitions:** MPU9250 modules sold online may have slightly different pin orders. Check the VCC/GND/SCL/SDA order before soldering.
-
-**Soldering order:** Solder the SMD parts such as MOSFETs and resistors on the baseboard first, then solder the female headers. This prevents the headers from blocking the soldering area.
-
-**Spare parts:** Coreless motors are consumables. It is recommended to buy one or two additional motors during the first purchase.
-
-**Build environment:** Arduino IDE 2.x or PlatformIO is recommended. Before the first build, install ESP32-S3 board support. See the environment setup section in the tutorial.
-
-**Optical-flow module:** The firmware uses a 115200 bps serial optical-flow/ToF module and parses 19-byte packets beginning with 0xDF. Verify the communication protocol when replacing it; floor texture, reflectivity, illumination, and height all affect optical-flow/ToF availability.
-
-**First-flight check:** With the propellers removed, use the serial CLI commands `imu`, `flow`, and `rc` to verify inertial, optical-flow/ToF, and receiver input, then check motor order and direction at low output. Install the propellers only after these ground checks and conduct the first supervised STAB flight in a clear area.
+| Resource | Link |
+| --- | --- |
+| Source code and collaboration | [GitHub repository](https://github.com/npu-ius-lab/open32drone) |
+| Build and development tutorials | [Open32Drone documentation](https://npu-ius-lab.github.io/open32drone/) |
+| PCB design | [JLC Open Hardware](https://oshwhub.com/fanchewang/open32drone) |
+| Frame printing | [MakerWorld](https://makerworld.com.cn/zh/models/2922108-open32drone-wu-ren-ji-8520kong-xin-bei-ji-jia-ros2#profileId-3425842) |
 
 ---
 
 ## Contributing
 
-Open32Drone is an open-source project, and community developers are welcome to help maintain and improve it:
+Contributions to maintain and improve Open32Drone are welcome:
 
 * **Code contributions**: Fix bugs or submit new feature modules.
 * **Documentation maintenance**: Help translate documentation or write more detailed tutorials.
@@ -151,6 +127,8 @@ Special thanks to the following excellent open-source project for providing insp
 
 ## License
 
-This project is licensed under the **[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)**.
+Original Open32Drone code and documentation are licensed under the **[Apache License 2.0](https://www.apache.org/licenses/LICENSE-2.0)**, unless otherwise stated. Test methods and other components with separate license notices follow their respective terms.
+
+See [LICENSE](./LICENSE) for the full terms and [LICENSE.txt](./LICENSE.txt) for the licensing scope. Third-party code, dependencies, hardware designs and media retain their applicable licenses; see the [third-party notices](./docs/project/third-party.md) for sources and exceptions.
 
 [![License](https://img.shields.io/badge/License-Apache_2.0-blue.svg)](https://opensource.org/licenses/Apache-2.0)
