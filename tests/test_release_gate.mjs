@@ -12,10 +12,32 @@ const request = (options = {}) => async url => {
     tag_name: 'test-only', draft: options.draft || false,
     assets: [...names.slice(options.missing ? 1 : 0), 'SHA256SUMS'].map(name => ({ name })),
   }), { status: options.notFound ? 404 : 200 })
-  return new Response(url.endsWith('SHA256SUMS') ? sums : options.corrupt ? 'wrong bytes' : payload)
+  return new Response(url.endsWith('SHA256SUMS') ? (options.manifest ?? sums) : options.corrupt ? 'wrong bytes' : payload)
 }
 test('accepts a complete, matching Release', async () => {
   assert.deepEqual(await verifyPublicRelease({ tag: 'test-only', sums, request: request() }), names)
+})
+
+test('accepts LF and CRLF manifests on either side', async () => {
+  const windowsSums = sums.replaceAll('\n', '\r\n')
+  for (const local of [sums, windowsSums]) {
+    for (const remote of [sums, windowsSums]) {
+      assert.deepEqual(await verifyPublicRelease({
+        tag: 'test-only', sums: local, request: request({ manifest: remote }),
+      }), names)
+    }
+  }
+})
+
+test('rejects changed hashes and filenames even with CRLF line endings', async () => {
+  for (const manifest of [
+    sums.replace(digest, '0'.repeat(64)),
+    sums.replace(names[0], 'different-full.bin'),
+  ]) {
+    await assert.rejects(verifyPublicRelease({
+      tag: 'test-only', sums, request: request({ manifest: manifest.replaceAll('\n', '\r\n') }),
+    }), /SHA256SUMS differs/)
+  }
 })
 test('rejects absent or draft Releases', async () => {
   for (const options of [{ notFound: true }, { draft: true }]) {

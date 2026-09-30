@@ -5,8 +5,10 @@ import { pathToFileURL } from 'node:url'
 
 export async function verifyPublicRelease({ tag, sums, request = fetch }) {
   if (!tag?.trim()) throw new Error('An existing public Release tag is required')
+  // Windows-authored manifests and Linux checkouts use different line endings.
+  const normalizedSums = sums.replaceAll('\r\n', '\n').trim()
   const repository = 'npu-ius-lab/open32drone'
-  const entries = sums.trim().split('\n').map(line => {
+  const entries = normalizedSums.split('\n').map(line => {
     const match = /^([0-9a-f]{64})\s+(Open32Drone-\d{8}-\d{6}-(?:full\.bin|app\.bin|android\.apk|ros2\.tar\.gz))$/.exec(line)
     if (!match) throw new Error('Invalid SHA256SUMS entry')
     return { digest: match[1], name: match[2] }
@@ -27,7 +29,9 @@ export async function verifyPublicRelease({ tag, sums, request = fetch }) {
   }
   const prefix = `https://github.com/${repository}/releases/download/${encodeURIComponent(tag)}/`
   const remoteSums = await (await get(`${prefix}SHA256SUMS`)).text()
-  if (remoteSums.trim() !== sums.trim()) throw new Error('Release SHA256SUMS differs from this source checkout')
+  if (remoteSums.replaceAll('\r\n', '\n').trim() !== normalizedSums) {
+    throw new Error('Release SHA256SUMS differs from this source checkout')
+  }
   await Promise.all(entries.map(async ({ name, digest }) => {
     const bytes = await (await get(prefix + name)).arrayBuffer()
     if (createHash('sha256').update(Buffer.from(bytes)).digest('hex') !== digest) {
