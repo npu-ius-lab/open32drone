@@ -1,11 +1,27 @@
----
-layout: false
-title: 下载与更新
-search: false
-head:
-  - - meta
-    - http-equiv: refresh
-      content: '0;url=https://github.com/npu-ius-lab/open32drone/releases'
----
+# 更新日志
 
-[查看 GitHub Releases](https://github.com/npu-ius-lab/open32drone/releases)
+只记录 Open32Drone 配套软件对使用者有影响的变化。
+
+## 文档更新
+
+- 增加单台采购清单，提供用量、选型说明和商品链接。
+- 补充 MakerWorld 打印配置与嘉立创 PCB 工程直达入口。
+- 按开始制作、刷写首飞、调参、ROS 2 和源码开发整理教程导航。
+- 精简装配页面目录，侧栏使用单语言名称，便于查找章节。
+- README 专注项目介绍，具体操作统一在文档站查看。
+
+本次文档更新不改变固件与客户端行为。安装条件和待验证事项见[下载说明](../../software/releases/minimal/README.zh-CN.md)。
+
+## 当前功能
+
+- ESP32-S3 固定 300 Hz 调度、编译时选择 I²C IMU、TF-0850 定高定点及自动起降。
+- 自动起降期间允许姿态介入，保留 SBUS 优先权、失联下降、翻覆停桨、电压采集和有界补偿。
+- Android 0.1 提供原子化定点起飞、指定飞机 UDP 路由、可配置地址和可选小窗图传。
+- ROS 2 包 0.1.0 提供遥测、TF/RViz、生命周期、速度、位置及原始 RC 接口。
+- ROS 模式及生命周期请求等待真实 FCU ACK；Offboard 需要新鲜位置、连续预热设定值
+  和实际 AUTO 遥测确认。被拒绝时仅在有限窗口重试，过期 ACK 不能重启已终止流程。
+- 地面 A/B OTA、默认 AP、可选路由器 STA 和恢复 AP。
+- 适配 8520 电机和同规格 60 mm 或 65 mm 桨叶的机架与机械 BOM。
+
+这里记录实现内容，不代表所有装配和环境均已验证。
+具体文件验证状态以下载说明为准。

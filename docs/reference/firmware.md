@@ -1,26 +1,32 @@
 # Firmware reference
 
-Use this page to look up supported hardware, pin assignments, flight modes,
-parameters, and communication interfaces. For your first flight, start with
-[Flashing and first flight](../guide/04-firmware-flight.en.md). For tuning and
-flight problems, see [Tuning and troubleshooting](../guide/05-tuning.en.md).
+This page is the implementation reference for the current Open32Drone
+firmware. New operators should complete [Getting started](../guide/04-firmware-flight.en.md)
+first and use [Troubleshooting](../guide/05-tuning.en.md) only when an abnormal result
+appears.
 
-## Hardware and features {#identity-and-scope}
+## Identity and scope
 
-- Controller and airframe: ESP32-S3, X-layout quadrotor, four brushed motors.
-- Attitude sensing: an I²C IMU; MPU6500/MPU9250 by default.
-- Altitude and position hold: a TF-0850 optical-flow/ToF module over UART.
-- Control: the Android app, an SBUS transmitter, or ROS 2/MAVROS.
-- Firmware updates: USB flashing or Wi-Fi OTA while disarmed.
+- project name: Open32Drone (existing firmware still reports the build identifier `minimal`; this is not a separate product or branch);
+- target: ESP32-S3, Quad-X, four brushed motors;
+- IMU: build-selected FlixPeriph I²C backend; default MPU6500/MPU9250;
+- horizontal/height sensor: TF-0850 optical-flow/ToF over UART;
+- control links: SBUS, dedicated Android, ROS 2/MAVROS;
+- update: full USB flash plus ground-only A/B OTA.
 
-## Interfaces and pin assignments {#hardware-contract}
+The firmware does not use QGC as a flight-control client and does not contain
+missions, barometer control, a complex collision classifier, direct MAVLink
+motor control, hover trim, or automatic parameter-profile migration. The
+current source has an experimental background HTTP MJPEG path; it is outside
+the 300 Hz loop and is not yet software/hardware/flight release evidence. Standard
+MAVLink parameters remain available for optional ground-only inspection and
+editing from QGC.
 
-These are the current firmware pin assignments. Motor positions are viewed
-from above, with the nose pointing forward.
+## Hardware contract
 
 | Function | Peripheral | Pins/configuration |
 |---|---|---|
-| IMU | I²C (`Wire`) | SDA `GPIO2`, SCL `GPIO43`, 400 kHz |
+| Build-selected IMU | `Wire` | SDA `GPIO2`, SCL `GPIO43`, 400 kHz |
 | Status LED | GPIO | `GPIO21` |
 | Rear-left motor | LEDC channel 1 | `GPIO4` |
 | Rear-right motor | LEDC channel 2 | `GPIO3` |
@@ -31,22 +37,27 @@ from above, with the nose pointing forward.
 | TF-0850 | `Serial1` | RX `GPIO8`, TX `GPIO7`, 115200 8N1 |
 | USB console | `Serial` | 115200 baud |
 
-Motor PWM is 10 kHz at 10-bit resolution. All four PWM channels must initialize
-successfully before arming. Disarmed output is zero; armed idle is 10% before the
+Motor PWM is 10 kHz at 10-bit resolution. All four LEDC attachments must
+succeed before arming. Disarmed output is zero; armed idle is 10% before the
 pilot or automatic controller requests more thrust.
 
-### Selecting an IMU {#imu-build-profiles}
+### IMU build profiles
 
-Select the IMU model in `firmware/imu_backend.h` before compiling.
+`software/firmware/imu_backend.h` selects one backend at compile time. Runtime
+auto-detection across unrelated sensor families is deliberately avoided: it
+would make startup, scaling, orientation, and failure handling harder to teach
+and reproduce.
 
 | Build value | Driver | Status |
 |---|---|---|
-| `OPEN32DRONE_IMU_MPU9250` | MPU6500/MPU9250/MPU9255 family | default configuration |
-| `OPEN32DRONE_IMU_ICM20948` | ICM20948 | included in automated build checks; hardware testing still required |
-| `OPEN32DRONE_IMU_MPU6050` | MPU6050 | included in automated build checks; hardware testing still required |
+| `OPEN32DRONE_IMU_MPU9250` | MPU6500/MPU9250/MPU9255 family | default standard-airframe profile |
+| `OPEN32DRONE_IMU_ICM20948` | ICM20948 | CI compile profile; requires board-specific bench/flight validation |
+| `OPEN32DRONE_IMU_MPU6050` | MPU6050 | CI compile profile; requires board-specific bench/flight validation |
 
-After replacing the IMU, check its wiring and orientation, calibrate it, and
-complete propeller-off checks before attempting flight.
+All profiles expose the same accelerometer/gyroscope contract to estimation
+and control. Selecting a different backend does not prove that its mounting
+rotation, electrical interface, calibration, or flight tuning matches the
+standard aircraft.
 
 ## Mounting and coordinate frames
 
@@ -63,50 +74,55 @@ complete propeller-off checks before attempting flight.
 
 ## Boot sequence
 
-[![Startup sequence](/media/figures/boot-sequence.en.svg)](/media/figures/boot-sequence.en.svg)
+```text
+power -> parameter storage -> LEDC motors -> optional camera allocation
+      -> Wi-Fi/MAVLink/OTA -> optional camera stream
+      -> selected IMU backend -> SBUS -> TF-0850 -> gyro calibration -> ready
+```
 
 Gyro calibration runs at every cold boot and is not loaded from NVS. It needs
 at least 500 samples and two seconds of stationary data. The LED is on during
 initialization and turns off after setup. After initialization, GPIO21 blinks
 at `2 Hz` only after filtered battery voltage stays at or below `3.10 V` for
-`1.5 s`; it clears after voltage stays at or above `3.20 V` for `1.0 s`.
+`1.5 s`; it clears after `3.20 V` for `1.0 s`. This is a visual warning, not an
+arm, land, or flight-mode command. Use serial status and client telemetry, not
+LED timing alone, to decide whether the aircraft is ready.
 
-## Flight modes and switching controllers {#modes-and-control-ownership}
+## Modes and control ownership
 
 | Custom mode | Name | Purpose |
 |---:|---|---|
 | `2` | Stabilize | attitude stabilization, direct pilot throttle |
-| `3` | Automatic | automatic takeoff, landing, or active Offboard control |
+| `3` | Automatic | internal takeoff, landing, or validated Offboard ownership |
 | `4` | Altitude Hold | attitude plus ToF height/vertical-speed control |
 | `5` | Position Hold | altitude plus optical-flow horizontal hold |
 
 Mode `3` is not user-selectable. The default three-position SBUS switch maps
 low/middle/high to `2/4/5`.
 
-Deliberate SBUS stick input takes priority over Android or ROS. A receiver
-sending unchanged neutral stick values does not take control. The firmware
-first observes neutral sticks, then uses subsequent stick movement to detect
-takeover. The transmitter's emergency stop remains
-available regardless of the current controller.
+Control priority is deliberate physical SBUS input, then the active Android or
+ROS lease. A receiver that merely emits static frames does not own the
+aircraft. After a neutral observation period, clear stick movement proves pilot
+intent. The physical bottom-left emergency-disarm gesture remains independent
+of ordinary ownership.
 
-## Checks before arming {#pre-arm-contract}
+## Pre-arm contract
 
-The firmware refuses to arm in any of these conditions:
+Arming fails closed if any of these checks fails:
 
 1. OTA is active;
 2. NVS parameter storage is unavailable;
 3. accelerometer calibration is running;
-4. any motor PWM channel failed to initialize;
+4. any motor PWM channel failed to attach;
 5. IMU data is missing or older than 50 ms;
 6. gyro calibration is incomplete;
 7. attitude or rate state is invalid;
 8. the required RC mapping/link or MAVLink link is invalid;
 9. active input throttle is above 5%;
-10. measured control-loop rate is below 200 Hz;
-11. the control-loop watchdog is unavailable or has detected a fault.
+10. measured control-loop rate is below 200 Hz.
 
-When Android or ROS sends a takeoff command, the firmware performs these
-checks. If a check fails, it rejects the command and reports the reason.
+Android/ROS automatic takeoff runs this same check atomically; clients must not
+duplicate it with their own readiness state machine.
 
 ## Automatic takeoff and landing
 
@@ -114,44 +130,48 @@ Automatic takeoff accepts a relative height from `0.20` to `5.80 m`. The
 default is `0.60 m`. It begins with a 20% thrust limit, increases the limit by
 `0.45/s`, uses a maximum of `ALT_TKO_THR`, advances the height target at
 `0.40 m/s`, and keeps that target no more than `0.12 m` ahead of the measured
-height. Before takeoff, valid TF-0850 blind-zone packets can confirm that the
-sensor is online. During descent, a
-near-ground range observed within the past second allows fresh blind-zone packets
-to participate in touchdown detection, together with low thrust, low vertical
-speed and sustained rest. Once disarmed with motors stopped, fresh blind-zone
-packets and sustained rest can also restore ground confirmation. Sensor loss,
-stale IMU data, or invalid range appearing at height are not evidence of touchdown.
+height. A fresh TF-0850 blind-zone packet is valid ground evidence.
 
 `MAV_CMD_NAV_TAKEOFF`, used by Android and ROS 2, always hands over to
 `POS_HOLD`; the standby mode shown before the command does not change that
 result. Physical-SBUS assisted takeoff remains different by design and returns
 to the Altitude/Position mode selected by its switch.
 
-Normal automatic takeoff and landing control vertical motion only; the pilot
-can still adjust roll, pitch, and yaw. Network stick commands are ignored
-after failsafe activation.
-
-In Position Hold, horizontal sticks command velocity while optical-flow data
-is valid. When flow is temporarily unavailable, the sticks adjust roll and
-pitch directly, still limited to `12 deg`. Without valid stick input, the
-aircraft gradually levels out.
+The automatic controller owns vertical motion only. Live roll, pitch, and yaw
+remain available during takeoff and landing. Position mode translates live
+horizontal stick input into velocity while flow is valid. If the flow gate is
+unavailable or still qualifying, roll/pitch slew toward live pilot input inside
+the same `12 deg` position-control envelope; without a live pilot they slew
+toward level. This prevents a gate transition from exposing the `30 deg`
+Stabilize envelope.
 
 Landing descends at about `0.45 m/s` above `0.30 m`, then `0.28 m/s` near the
-floor. Around `0.14 m`, it starts reducing thrust for touchdown (flare);
-thrust can only decrease from this point. Fresh range,
-low vertical speed, low thrust and resting inertial data must confirm contact
-continuously for at least `300 ms`.
+floor, and commits to a one-way flare around `0.14 m` clearance. After contact
+it disarms instead of commanding a rebound.
 
 ## Estimation
 
-The IMU uses ±4 g and ±2000 deg/s ranges, an approximately 50 Hz hardware
-low-pass filter, and an approximately 1 kHz sample rate. The firmware estimates
-attitude from acceleration and angular rate, without magnetometer heading
-correction.
+The selected backend is configured for ±4 g, ±2000 deg/s, an approximately
+50 Hz hardware DLPF, and an approximately 1 kHz sensor rate. The flight
+estimator consumes only acceleration and angular rate. A backend such as the
+MPU9250 driver may initialize or transfer its magnetometer internally, but
+Open32Drone never requests magnetic data and has no magnetic-heading fusion.
+Yaw is gyro-integrated and corrected only by pilot or offboard yaw commands.
+A software acceleration LPF (`IMU_ACC_LPF_A`) rejects motor/propeller vibration
+before attitude and height estimation.
 
-Each TF-0850 packet contains 19 bytes. The firmware checks freshness, valid range and tilt, and plausible velocity before estimating position from horizontal velocity. Sudden outliers are filtered, and each estimator correction is bounded.
+`EST_LVL_WEIGHT` is active, not obsolete. On the ground, gravity correction
+uses `EST_ACC_WEIGHT`; in flight it uses the much smaller `EST_LVL_WEIGHT` only
+when acceleration magnitude and rotation gates say gravity is reliable.
 
-While the aircraft is stationary on the ground, the firmware collects 30 valid samples to estimate optical-flow bias automatically; no manual calibration is needed. Re-arming during the same boot does not clear the measured bias. When a fallback bias is used, `flowBiasFallback` marks it in the log; horizontal tilt correction is limited to `3°` and velocity-error integration pauses.
+TF-0850 processing validates the 19-byte stream, freshness, integration time,
+range, tilt, and plausible velocity. Horizontal estimation applies delayed
+gyro compensation, the fixed 24 mm yaw-offset compensation, stationary ground
+bias learning, spike/innovation limits, then integrates position. Ground bias
+becomes ready after 30 valid stationary samples; it is runtime state, not a
+manual calibration parameter. The `2.5 m/s` optical-flow threshold rejects an
+implausible sensor sample; it is not a commanded flight-speed limit. Valid
+measurements are not clamped to a gate boundary.
 
 ## Control-loop timing
 
@@ -159,26 +179,24 @@ The main loop starts on a fixed `300 Hz` schedule, reads one sample through the
 selected IMU backend, then completes input, estimation, control, and motor
 output in order. If one iteration misses its deadline, the scheduler records
 the lateness and starts a new phase from the current time; it never runs a
-catch-up burst. The rate reported by `time` counts complete control iterations.
-
-An independent high-priority timer monitors complete armed control iterations.
-If none completes for more than `100 ms`, it stops all four LEDC PWM channels
-before restarting. `sys` reports initialization status. Actual motor-stop timing
-still needs propeller-off fault-injection verification on hardware.
+catch-up burst. The reported rate is therefore complete control iterations,
+not an empty-task counter.
 
 | Work | Service rate |
 |---|---:|
 | IMU, RC, TF-0850, estimation, control, motor output | every tick, 300 Hz |
-| MAVLink command and telemetry scheduling | 150 Hz |
 | Serial CLI | 100 Hz |
+| MAVLink receive/transmit service | 150 Hz |
 | OTA boot-health validation | 50 Hz while pending |
 | Battery ADC | 10 Hz |
 | In-memory flight log | 25 Hz while armed |
 | Deferred NVS parameter sync | 1 Hz, motors stopped only |
 
-The fixed schedule gives the controller a consistent calculation interval.
-Serial and MAVLink services run at their own rates so communication and
-diagnostic output do not occupy the flight loop for long periods.
+The hot path caches the fixed IMU mounting quaternion and computes shared Euler
+angles/body-up direction once per estimator update. Scheduled MAVLink telemetry
+is spread across successive loops rather than emitted as one burst. These are
+execution-cost changes only: this batch does not alter PID gains, estimator
+weights, TF-0850 compensation, mode behavior, or motor mapping.
 
 Use these serial commands while disarmed:
 
@@ -194,13 +212,13 @@ perf
 samples one loop in sixteen and reports mean and maximum execution cost for IMU
 acquisition, inputs, estimators, control/motors, serial CLI, MAVLink/OTA, and
 housekeeping. Scheduled idle waiting occurs before the sampled work and is not
-reported as CPU cost.
-For performance diagnosis, compare these workloads separately: aircraft alone, Android connected,
+reported as CPU cost. `perf` is a diagnostic sampler, not a flight task.
+Compare at least these workloads separately: aircraft alone, Android connected,
 ROS connected, and QGC parameter view open. Do not run those clients together.
 Verbose diagnostics and full log/parameter dumps are rejected while armed;
 short status commands remain available.
 
-## Default parameter values {#compiled-parameter-defaults}
+## Compiled parameter defaults
 
 Stored valid NVS values override these defaults. `p` prints the effective
 values on the current aircraft.
@@ -233,7 +251,7 @@ values on the current aircraft.
 | `ALT_CORR_MAX` | `0.25` | maximum correction around hover thrust |
 | `ALT_VEL_MAX` | `0.45 m/s` | pilot vertical-speed limit |
 | `ALT_STICK_DB` | `0.10` | deadband around fixed 50% stick center |
-| `ALT_HOVER` | `0.49` | base hover thrust, before voltage compensation |
+| `ALT_HOVER` | `0.49` | hover feed-forward before bounded voltage compensation |
 | `ALT_TKO_H` | `0.60 m` | assisted RC takeoff height |
 | `ALT_TKO_TRIG` | `0.625` | assisted RC takeoff trigger |
 | `ALT_TKO_THR` | `0.90` | automatic takeoff thrust cap |
@@ -270,14 +288,14 @@ values on the current aircraft.
 | `POS_VEL_D_X` | `0` | X velocity derivative gain |
 | `POS_VEL_D_Y` | `0` | Y velocity derivative gain |
 | `POS_CMD_RATE` | `1.20 rad/s` | command-angle slew limit |
-| `FLOW_VEL_ALPHA` | `0.20` | fraction of the horizontal velocity estimate corrected by optical flow |
-| `FLOW_INNOV_LIM` | `0.80 m/s` | limit on a single velocity-estimate correction |
-| `FLOW_GYRO_P` | `-0.78` | optical-flow compensation for pitch rotation |
-| `FLOW_GYRO_R` | `-0.77` | optical-flow compensation for roll rotation |
-| `FLOW_GYRO_DLY` | `40 ms` | time alignment delay between optical flow and gyro data |
-| `FLOW_BIAS_A` | `0.02` | optical-flow bias update fraction while stationary |
+| `FLOW_VEL_ALPHA` | `0.20` | velocity innovation blend |
+| `FLOW_INNOV_LIM` | `0.80 m/s` | innovation limit |
+| `FLOW_GYRO_P` | `-0.78` | pitch rotation fit |
+| `FLOW_GYRO_R` | `-0.77` | roll rotation fit |
+| `FLOW_GYRO_DLY` | `40 ms` | delayed gyro alignment |
+| `FLOW_BIAS_A` | `0.02` | stationary bias adaptation |
 
-Horizontal movement also has these limits:
+The remaining horizontal bounds have distinct jobs:
 
 - the final commanded XY speed vector is at most `POS_STICK_V`;
 - Position Hold roll/pitch is at most `min(CTL_TILT_MAX, 12 deg)` and changes
@@ -310,21 +328,29 @@ Horizontal movement also has these limits:
 | `MAV_RATE_SLOW`, `MAV_RATE_FAST` | `2 Hz`, `10 Hz` |
 | `PWR_VOLT_PIN` | `1` (`GPIO1/A0`; `-1` explicitly disables it) |
 | `PWR_VOLT_SCALE`, `PWR_VOLT_LPF_A` | `2`, `0.20` |
-| `PWR_COMP_REF` | `3.28 V` (reference voltage, where the factor is 1) |
-| `PWR_COMP_SLP` | `0.472 / V` (factor increase per volt of voltage drop) |
-| `PWR_COMP_MAX` | `1.20` (factor range: `1/1.20` to `1.20`; `1.00` disables compensation) |
+| `PWR_COMP_REF` | `3.28 V` (loaded-voltage crossover) |
+| `PWR_COMP_SLP` | `0.472 / V` (normalized factor slope) |
+| `PWR_COMP_MAX` | `1.20` (symmetric factor bound; `1.00` disables it) |
 | `SF_RC_LOSS_TIME` | `1 s` |
 | `SF_DESCEND_TIME` | `5 s` |
 
-These RC channel defaults are used when no calibration values have been
-saved. Run `cr` before first use or after changing SBUS transmitters.
-The firmware then uses the valid saved calibration values.
+The RC endpoint values above are missing-key defaults for the standard
+transmitter profile, not a substitute for verification. Run `cr` for each
+transmitter when SBUS is used. Valid saved NVS endpoints override these values.
 
-### Battery voltage and thrust compensation
-
-The ADC samples 10 times per second using calibrated millivolt readings, 11 dB attenuation and a low-pass filter. Converted battery readings outside `2.0..4.5 V` are not published. The firmware does not estimate remaining charge percentage. Low voltage triggers an LED warning, but does not automatically prevent arming or trigger landing.
-
-Valid voltage data produces a factor of `clamp(1 + PWR_COMP_SLP × (PWR_COMP_REF - voltage), 1/PWR_COMP_MAX, PWR_COMP_MAX)`. Disabled or stale sensing, or `PWR_COMP_MAX=1.00`, produces `1.00`. The factor multiplies only `ALT_HOVER`, before the altitude PID.
+The ADC uses calibrated millivolts, explicit 11 dB attenuation, a 10 Hz sample
+rate, and the configured low-pass filter. Samples outside the plausible 1S
+range `2.0..4.5 V` are not published. Remaining capacity stays unknown and
+voltage never gates flight. A fresh sample produces
+`clamp(1 + PWR_COMP_SLP × (PWR_COMP_REF - voltage), 1/PWR_COMP_MAX,
+PWR_COMP_MAX)`; stale/disabled sensing or `PWR_COMP_MAX=1.00` produces `1.00`.
+The factor multiplies only `ALT_HOVER` before the height PID. A low-voltage
+increase is capped at the proven `0.49` feed-forward during automatic takeoff,
+then slews at no more than `0.05/s`; loss of a valid sample slews back to the
+legacy feed-forward. It does not multiply PID attitude corrections or final
+motor outputs, and it does not change direct STAB/Offboard throttle, the
+automatic takeoff cap, or the one-way landing flare. The independent ESP32
+brownout detector remains enabled.
 
 `pw` prints the selected GPIO, raw ADC millivolts, scale, filtered battery
 voltage, and the active compensation factor. For optional DMM calibration while
@@ -334,27 +360,21 @@ disarmed:
 new scale = current PWR_VOLT_SCALE × DMM battery voltage / reported voltage
 ```
 
-Valid saved parameters take priority over compiled defaults. Rebuilding and
-flashing the firmware preserves them as long as NVS is not erased.
+A stored valid NVS parameter still overrides the compiled default. This rule is
+intentional; the firmware never silently rewrites an aircraft's settings.
 
-## Saving and restoring parameters {#nvs-behavior}
-
-Parameters and calibration data are saved in the board's NVS flash storage
-and survive power loss. Serial `p NAME VALUE`, ground-only MAVLink `PARAM_SET`,
-`ca`, `cr`, and `ap`/`sta` save their corresponding settings. Boot gyro bias,
-optical-flow ground bias, controller integrators, and flight targets are used
-only during the current run, not saved as tuning values.
+## NVS behavior
 
 - Namespace: `flix`.
-- Missing parameters use compiled defaults.
-- Valid stored values take precedence; invalid values are ignored and reported over serial.
+- Missing keys use compiled defaults; the firmware does not pre-fill every key.
+- A valid stored value overrides the compiled default.
+- Invalid stored values are ignored and reported.
 - Parameter writes occur at most once per second and only while motors are
   stopped, to avoid flash latency during flight.
 - `preset` removes registered flight parameters and reboots, but preserves
   Wi-Fi credentials.
 - A full chip erase removes all flight calibration and Wi-Fi credentials.
-- Firmware updates do not automatically convert old parameters; follow the
-  update notes for parameter changes between versions.
+- No code path silently migrates or rewrites an old tuning profile.
 
 ## Serial console
 
@@ -367,9 +387,9 @@ only during the current run, not saved as tuning values.
 | `perf`, `perf reset` | sampled loop-stage cost or reset its counters; disarmed only |
 | `ps`, `psq` | Euler attitude or quaternion |
 | `imu` | sensor, gyro calibration, and landed state |
-| `arm`, `disarm` | arm/disarm through the serial console |
+| `arm`, `disarm` | CLI lifecycle control |
 | `stab` | select Stabilize while disarmed |
-| `auto` | show how to enter automatic mode |
+| `auto` | explain automatic ownership rule |
 | `rc` | raw/normalized SBUS, owner, mode, armed state |
 | `wifi` | configured/runtime mode, address, RSSI, UDP peer and counters |
 | `ap SSID PASS` | store AP credentials and select direct mode; reboot required |
@@ -385,44 +405,43 @@ only during the current run, not saved as tuning values.
 | `sys` | build, chip, loop, packets, NVS, task status |
 | `reset`, `reboot` | reset estimator/calibration state or reboot |
 
-Change parameters, calibrate, test individual motors, and run `reset` or `reboot` while disarmed. The firmware checks whether each operation is allowed and reports a reason if it rejects it.
+Parameter changes, calibrations, motor tests, reset, and reboot are rejected
+while armed where applicable.
 
-## MAVLink interface {#mavlink-surface}
+## MAVLink surface
 
 The firmware publishes heartbeat, system/extended state, battery, attitude,
 IMU, local position, distance sensor, RC channels, actuator target, status text,
 available/current modes, parameters, and logs. It accepts:
 
-- arm, ordinary ground disarm, and explicit emergency stop (`param2=21196`);
+- arm/disarm;
 - mode selection for Stabilize, Altitude Hold, and Position Hold;
 - takeoff and land;
 - `MANUAL_CONTROL`;
 - attitude targets;
-- local-NED position/velocity targets after a continuous setpoint stream
-  passes the Offboard startup checks;
-- parameter read/write and packet-by-packet log download.
+- local-NED position/velocity targets after validated Offboard warmup;
+- parameter read/write and bounded log download.
 
-Ordinary disarm returns `DENIED` in flight or when ground state is uncertain;
-use `LAND` to descend. Active Offboard is not implicitly taken over by ordinary
-`MANUAL_CONTROL`; explicitly select a pilot mode first. ROS yaw rate follows
-ENU: positive is counterclockwise. MAVROS converts to NED and firmware converts
-to its internal frame.
+Direct MAVLink motor commands and mission execution are intentionally absent.
 
 Parameter editing uses the standard `PARAM_REQUEST_LIST`,
 `PARAM_REQUEST_READ`, `PARAM_SET`, and `PARAM_VALUE` messages. This is
 independent of the outbound `SERIAL_CONTROL_DEV_SHELL` diagnostic-text mirror.
-The latter only sends diagnostic text and does not accept remote CLI
-commands. Parameter editing does not depend on it.
+The latter does not accept remote CLI commands; it is not required for
+parameter editing, and both paths are retained.
 
 Telemetry remains at the configured per-message rates, but pending messages
 are serialized one scheduled packet per control iteration. Parameter lists are
 streamed at 20 values per second. Log downloads send one bounded packet per
-iteration and only while disarmed. Logs come from the in-memory buffer in chronological order. Export CSV with serial `log dump` for analysis on a computer.
+iteration and only while disarmed; the bytes are the valid chronological rows
+of the firmware's float log buffer. The serial `log dump` CSV remains the
+primary human-readable flight-analysis format.
 
 ### Optional QGC ground parameter editor
 
-QGC can view and edit parameters through the standard MAVLink parameter
-interface.
+QGC is not part of the flight-control path. The compatibility target is the
+standard MAVLink parameter page, including QGC Android 5.0.3; live device
+validation is still required before claiming that particular build as tested.
 
 1. Remove propellers, leave the aircraft disarmed and motors stopped.
 2. Stop Android and ROS, connect the phone/computer to the aircraft Wi-Fi, and
@@ -434,21 +453,21 @@ interface.
 5. Leave the aircraft powered and stopped for at least two seconds so deferred
    NVS synchronization can complete. Reboot and read the value again.
 
-## Connection loss and fault protection {#failsafe-timing}
+There is no QGC parameter metadata package yet, so units, descriptions,
+drop-downs, and recommended ranges may be absent. Use this page for meanings
+and limits. Do not use QGC to arm, change flight mode, take off, land, send a
+mission, or send setpoints; use the matched Android app, ROS 2 package, or
+physical SBUS path instead.
+
+## Failsafe timing
 
 - RC frame stale timeout: `150 ms`, with three lost-frame confirmation samples.
 - MAVLink manual-control freshness: `500 ms`.
 - Offboard setpoint timeout: `300 ms`.
 - MAVLink heartbeat/link health: `3 s` for pre-arm connection checks.
 - Configurable input-loss latch: `SF_RC_LOSS_TIME`, default `1 s`.
-- Fresh ToF enables altitude-controlled failsafe landing with contact confirmation.
-  Without range, `SF_DESCEND_TIME` (default `5 s`) bounds thrust reduction; expiry
-  is not reported as confirmed touchdown.
-- A failed IMU read or non-finite sample is discarded and counted. More than
-  `50 ms` without a valid sample, or invalid attitude/rate estimates, immediately
-  disarms. `imu` reports error counts and maximum sample gap.
-- Stale retained height has `heightValid=0`; vertical velocity decays by elapsed
-  time. `groundConfirmed` records contact state separately.
+- Controlled thrust ramp-down: `SF_DESCEND_TIME`, default `5 s`.
+- Any armed IMU/estimator failure immediately disarms.
 - Any armed body tilt over `70 degrees` sustained for `250 ms` immediately
   disarms with reason `tip-over`; this simple guard does not use ToF or impact
   acceleration.
@@ -479,29 +498,19 @@ as a recovery network without rewriting `WIFI_MODE=2`; the next reboot retries
 STA. Use `ap SSID PASS` to select AP permanently. `preset` preserves both AP
 and STA credentials, while a complete flash erase removes them.
 
-Connect only one Android or ROS controller to an aircraft at a time. After
-receiving a valid controller heartbeat, the firmware records its IP address
-and UDP port for replies. This address does not change while armed. Once
-disarmed, a new controller's heartbeat can select a different address only
-after the previous controller has sent no valid data for more than `3 s`.
+Only one Android or ROS MAVLink controller may own one aircraft at a time. The
+most recent valid UDP sender becomes the reply peer. The experimental camera endpoint is
+`GET /stream` and accepts one viewer; it is independent from OTA HTTP `8080`.
 
-The experimental camera endpoint is `GET /stream` and accepts one viewer;
-it is independent from OTA HTTP `8080`.
-
-OTA endpoints:
+Endpoints:
 
 ```text
 GET  /api/ota/status
 POST /api/ota/update
 ```
 
-The update request supplies the application image's SHA-256 checksum in
-`X-Firmware-SHA256`. The board has two application partitions, A and B;
-OTA writes to the partition that is not currently running. Updates are
-rejected while armed, airborne, running motors, in automatic flight or
-Offboard, or while the current firmware is still completing its startup checks.
-
-After the update restarts, the firmware checks parameter storage, the IMU,
-gyro calibration, the control loop, TF-0850, and Wi-Fi. The new firmware must
-pass these checks within the validation window. If it fails, the bootloader
-restores the previous version.
+The update request requires the app image SHA-256 in
+`X-Firmware-SHA256`. OTA writes only the inactive slot and is rejected while
+armed, airborne, motor-active, automatic, Offboard, or pending boot validation.
+The new image must keep storage, IMU, gyro, loop, TF-0850, and Wi-Fi healthy for
+the validation window or the bootloader rolls back.

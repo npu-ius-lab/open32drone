@@ -7,7 +7,7 @@ build/
 *.bin
 *.hex
 output/
-!releases/**/*.bin
+!software/releases/**/*.bin
 
 # Python / ROS2
 __pycache__/
@@ -27,10 +27,10 @@ docs/.vitepress/dist/
 docs/.vitepress/.temp/
 
 # Android controller
-android/.gradle/
-android/local.properties
-android/build/
-android/app/build/
+software/android/.gradle/
+software/android/local.properties
+software/android/build/
+software/android/app/build/
 
 # 日志
 *.log
@@ -47,9 +47,6 @@ android/app/build/
 /artifacts/
 /backups/
 /reference/
-/.playwright-cli/
-# Separate local ESP-IDF experiments are not part of the main matched stack.
-/firmware_idf/
 *.bag
 *.db3
 *.mcap
@@ -58,9 +55,8 @@ android/app/build/
 *.key
 *.pem
 
-# Personal assistant rules remain local; only root AGENTS.md is shared.
+# Machine-local assistant rules are not project documentation
 AGENTS.md
-AGENTS.override.md
 AGENT.md
 CLAUDE.md
 GEMINI.md
@@ -70,6 +66,3 @@ CODEX.md
 .cursor/
 .cursorrules
 .github/copilot-instructions.md
-
-# Authorized team rules for the private repository only.
-!/AGENTS.md

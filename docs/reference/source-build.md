@@ -1,188 +1,272 @@
 # Source and build
 
-Start with the main loop to see how the aircraft reads sensors, stays stable and responds to a phone, radio transmitter or ROS program. The second half explains how to build the firmware, Android app and ROS 2 package. See [Parameters and interfaces](firmware.md) for individual settings.
+This page is the shortest source-reading path for the current Open32Drone
+firmware. It explains where a command enters, how it becomes motor
+output, and which file owns each state. It is not a tuning guide; use the
+[firmware reference](firmware.md) for parameters and the
+[development guide](source-build.md) for builds and validation.
 
-## Repository layout
+## The five-minute map
 
-| Directory | Contents |
-|---|---|
-| `hardware/` | Frame models, mechanical specifications and purchasing information |
-| `firmware/` | ESP32-S3 flight-controller source |
-| `android/` | Android controller source |
-| `ros2/` | ROS 2 driver, control commands and RViz configuration |
-| `simulation/` | Numerical dynamics, control and reinforcement-learning experiments |
-| `docs/` | Bilingual tutorials and website configuration |
-| `tests/` | Reusable source and documentation checks |
-| `releases/open32drone/` | Software packages, notes and checksums stored in the repository; see [GitHub Releases](https://github.com/npu-ius-lab/open32drone/releases) for downloads |
+```mermaid
+flowchart LR
+    RC[SBUS RC] --> OWN[Mode and ownership]
+    APP[Android MAVLink] --> MAV[MAVLink parser]
+    ROS[ROS 2 / MAVROS] --> MAV
+    MAV --> OWN
+    IMU[Build-selected IMU backend] --> EST[Attitude estimator]
+    FLOW[TF-0850 flow + ToF] --> EST
+    EST --> ALT[Altitude control]
+    EST --> POS[Position control]
+    OWN --> AUTO[Automatic takeoff / landing]
+    OWN --> ATT[Attitude target]
+    AUTO --> ALT
+    POS --> ATT
+    ALT --> THR[Collective thrust]
+    ATT --> RATE[Attitude outer loop]
+    RATE --> PID[Rate inner loop]
+    PID --> MIX[Four-motor mixer]
+    THR --> MIX
+    MIX --> MOT[10 kHz PWM]
+```
 
-## Code architecture
+The essential rule is simple: sensor code measures, estimator code describes
+the aircraft, mode/automatic code chooses targets, stabilization converts
+targets into torque, and the mixer converts torque plus collective thrust into
+four motor commands.
 
-[![Firmware control map](/media/figures/firmware-map.en.svg)](/media/figures/firmware-map.en.svg)
-
-Think of the flight controller as doing three jobs:
-
-1. **Work out what the aircraft is doing.** Read the IMU, optical flow and ToF to estimate tilt, height and movement.
-2. **Work out what it should do next.** Turn stick movements, takeoff/landing requests or ROS commands into a target attitude, height or speed.
-3. **Adjust the four motors.** Compare the current state with the target, then increase or decrease each motor's output to bring the aircraft closer to it.
-
-The sections below follow these three jobs through the code.
-
-## Reading order
+## Start reading here
 
 Read these functions in order before following individual features:
 
-1. `setup()` and `loop()` in `firmware/firmware.ino`: startup and the order of each loop;
-2. `control()` in `firmware/control.ino`: how the control steps fit together;
-3. `interpretControls()` in `firmware/control_modes.ino`: how sticks and mode selection become targets;
-4. `updateAutoFlightControl()` in `firmware/control_auto_flight.ino`: automatic takeoff and landing;
-5. `updateAltitudeHoldControl()` in `firmware/control_altitude.ino`: keeping a target height;
-6. `updatePositionControlSplit()` in `firmware/control_position.ino`: reducing horizontal drift;
+1. `setup()` and `loop()` in `software/firmware/firmware.ino`;
+2. `control()` in `software/firmware/control.ino`;
+3. `interpretControls()` in `software/firmware/control_modes.ino`;
+4. `updateAutoFlightControl()` in `software/firmware/control_auto_flight.ino`;
+5. `updateAltitudeHoldControl()` in `software/firmware/control_altitude.ino`;
+6. `updatePositionControlSplit()` in `software/firmware/control_position.ino`;
 7. `controlAttitude()`, `controlRates()`, and `controlTorque()` in
-   `firmware/control_stabilization.ino`: turning targets into four motor outputs.
+   `software/firmware/control_stabilization.ino`.
 
-## Flight-control main loop {#loop-timing}
+Arduino builds all `.ino` tabs in the sketch as one program. The files below
+are therefore responsibility boundaries for readers; they are not independent
+libraries or tasks. Shared control state deliberately remains in
+`control.ino`, which sorts before the specialized `control_*.ino` tabs.
 
-The flight controller targets **300 iterations per second**, or one iteration roughly every **3.3 milliseconds**. `loop()` in `firmware.ino` shows the order:
+## One loop iteration
 
-[![One 300 Hz control cycle](/media/figures/control-cycle.en.svg)](/media/figures/control-cycle.en.svg)
+`loop()` starts on a fixed 300 Hz schedule and keeps the execution order visible:
 
-Each iteration tries to read the sensors and uses valid readings to estimate attitude, height and horizontal velocity. It then uses the targets from the radio, phone or ROS to calculate the four motor outputs and updates the motor signals.
+```text
+wait for 300 Hz tick -> readIMU -> update time -> readRC -> readOpticalFlow
+        -> estimate attitude/height/horizontal velocity
+        -> choose targets and run controllers
+        -> write motors
+        -> rate-limited serial CLI and MAVLink/OTA service
+        -> voltage, flight log, deferred parameter sync
+```
 
-After updating the motors, the program handles serial and network messages. It also reads battery voltage, updates the LED and records logs at their own rates. Appearing in the main loop does not mean every job runs at 300 Hz.
+This order matters. Controllers use the sensor and estimator values produced
+earlier in the same iteration. Parameter writes are deferred until the end and
+remain blocked while motors are active.
 
-Changed parameters are saved when there is no motor output. The program checks once per second whether a save is needed, avoiding storage-write delays during flight. At the end of each iteration, it also updates a completion timestamp so a watchdog can detect a stalled loop.
+`beginPerformanceCycle()` and the stage markers only measure this same serial
+path; they do not create another task. One loop in sixteen is sampled. The IMU
+mounting quaternion is cached until its parameter changes, and the estimator
+publishes one shared Euler angle/body-up result for downstream controllers.
+CLI runs at 100 Hz, MAVLink at 150 Hz, and OTA boot validation at 50 Hz after
+motor output; RC, flow, estimation, control, and motor output still run every
+control tick. These choices remove jitter without changing controller equations.
 
-## Firmware file responsibilities {#firmware-file-ownership}
+## Firmware file ownership
 
-| File | Purpose | Look here when |
+| File | Owns | Look here when |
 |---|---|---|
-| `firmware.ino` | Start each module and run the main loop in order | Startup or execution order is unclear |
-| `time.ino` | Schedule iterations and measure execution time | The loop is slow or its duration varies |
-| `imu_backend.h`, `imu.ino` | Select the IMU driver, read measurements, convert mounting direction, filter and calibrate | IMU readings or calibration are wrong |
-| `flow.ino` | Read TF-0850 data and check optical flow and range readings | Range or flow data is missing |
+| `firmware.ino` | setup, main loop, build identity, global flow/ToF observations | startup or execution order is unclear |
+| `imu_backend.h`, `imu.ino` | compile-time driver selection, common acquisition, axis rotation, filtering, gyro calibration | raw IMU values or calibration is wrong |
+| `flow.ino` | TF-0850 packet parsing and flow/ToF health | range or optical-flow packets are missing |
 | `estimate.ino` | attitude, height and horizontal-motion estimates | measurements are valid but estimated state is wrong |
-| `control.ino` | Call takeoff/landing, altitude, position and attitude control in order | Following the complete control sequence |
-| `control_modes.ino` | Handle mode selection, sticks and radio takeover | Mode selection or takeover is wrong |
-| `control_offboard.ino` | Receive external targets and check the command stream and required sensors before enabling control | ROS commands cannot start controlling the aircraft |
-| `control_auto_flight.ino` | Progress through takeoff, landing and the mode change after takeoff | Automatic takeoff or landing behaves incorrectly |
+| `control.ino` | shared control state, mode constants, top-level control pipeline | tracing the whole controller |
+| `control_modes.ino` | RC mode interpretation, actuator ownership, assisted stick takeoff/landing requests | the selected mode or pilot takeover is wrong |
+| `control_offboard.ino` | Offboard setpoint staging, stream warmup, sensor gates and activation | ROS setpoints cannot enter AUTO/Offboard |
+| `control_auto_flight.ino` | automatic takeoff/landing phases and handover | one-key takeoff or landing behaves incorrectly |
 | `control_altitude.ino` | height target, vertical PID correction and tilt compensation | ALT_HOLD or vertical response is wrong |
-| `control_position.ino` | Correct horizontal movement using position and velocity estimated from optical flow | Position Hold drifts or cannot start |
+| `control_position.ino` | optical-flow position/velocity hold, gates and XY commands | POS_HOLD drifts or refuses to engage |
 | `control_stabilization.ino` | attitude loop, angular-rate PID and motor mixer | STAB oscillates or motor corrections have the wrong sign |
-| `motors.ino` | Configure motor pins and write PWM signals | A motor has no output or the numbering is wrong |
-| `rc.ino` | Read SBUS, calibrate sticks and recognize takeover and emergency stop | Radio transmitter behavior is wrong |
-| `mavlink.ino` | Exchange commands and aircraft state, handle parameters and limit data sent at once | Android/ROS commands, QGC parameter reads or reported state are wrong |
-| `safety.ino` | Check readiness, handle lost control links, disarm and stop tipped-over aircraft | Takeoff is refused or a fault does not stop the aircraft correctly |
-| `loop_watchdog.ino` | Detect a stalled loop, stop motors and restart | The program stalls or triggers a watchdog restart |
-| `parameters.ino` | Register parameters, check allowed values and load/save settings | Parameters are rejected or wrong after restart |
-| `ota.ino` | Receive updates on the ground, check startup and return to the old firmware if needed | An update or rollback fails |
-| `log.ino`, `cli.ino` | flight logs and serial inspection | diagnosing a repeatable symptom |
+| `motors.ino` | pin map, LEDC attachment and PWM output | a motor channel is unavailable or mapped incorrectly |
+| `rc.ino` | SBUS input, calibration, deliberate takeover and emergency gesture | physical transmitter behavior is wrong |
+| `mavlink.ino` | commands, setpoints, ground parameter management and bounded telemetry serialization | Android/ROS commands, QGC parameter reads, or reported state are wrong |
+| `safety.ino` | pre-arm checks, failsafe, disarm and minimal tip-over guard | an action is rejected or must fail closed |
+| `parameters.ino` | compiled defaults, validation, explicit NVS load/save | a parameter is rejected, missing or unexpectedly persisted |
+| `ota.ino` | ground-only A/B OTA and boot validation | an update or rollback fails |
+| `log.ino`, `cli.ino` | flight evidence and serial inspection | diagnosing a repeatable symptom |
 
-## Control modes
+## The control layers
 
 ### 1. STAB: attitude and rate control
 
-Stabilize mode makes the aircraft tilt and turn as requested. Roll and pitch sticks choose the target tilt; the yaw stick chooses turning speed. Throttle directly controls total thrust rather than holding a height.
+Pilot roll and pitch become target angles. Yaw stick becomes an extra target
+angular rate. Throttle is direct collective thrust.
 
-[![Attitude and rate cascade](/media/figures/attitude-control.en.svg)](/media/figures/attitude-control.en.svg)
+```text
+angle error -> attitude P controller -> target angular rate
+rate error  -> rate PID controller    -> target torque
+thrust + torque                       -> four motor outputs
+```
 
-For example, suppose the aircraft is level and you ask it to tilt forward:
+Conceptually, for one axis:
 
-1. `controlAttitude()` compares the target and current attitude to calculate how fast it should rotate toward the target.
-2. `controlRates()` compares that target rotation speed with the gyroscope measurement and uses PID to calculate a correction.
-3. `controlTorque()` distributes total thrust and the corrections across four motors. This is called mixing: increasing some motor outputs while decreasing others makes the aircraft tilt or turn.
+```text
+\omega_{target} = K_{att}(\theta_{target}-\theta)
+```
 
-In PID, P responds to the current error, I compensates for a persistent error, and D responds to changes in error to damp rapid responses. When a motor cannot increase or decrease any further, the program scales the corrections together and undoes the angular-rate integral added in that iteration, avoiding continued accumulation.
+```text
+\tau = K_P e_\omega + K_I\int e_\omega dt + K_D\frac{de_\omega}{dt}
+```
+
+The mixer scales torque corrections together when a motor would exceed its
+allowed range, and unwinds the rate integrators while saturated.
 
 ### 2. ALT_HOLD: add vertical control
 
-Altitude Hold adds a height target while retaining attitude stabilization. Start with `control_altitude.ino`.
+Altitude Hold keeps the same attitude/rate loops. A fresh battery-voltage
+sample first applies a bounded factor only to hover feed-forward, then adds the
+bounded height correction:
 
-The program starts with a base thrust close to that needed for hovering, then adds or subtracts thrust according to the height error and climb/descent speed. Centered throttle holds the target height; moving the stick above or below center gradually moves that target. During automatic takeoff or landing, the takeoff/landing code moves the target instead.
+```text
+k_V=\operatorname{clamp}\left(1+K_V^s(V_{ref}-V_{bat}),
+\frac{1}{k_{max}},k_{max}\right),\qquad
+T = k_V T_{hover} + K_P e_h + K_I\int e_h dt - K_D v_z
+```
 
-Battery voltage affects the thrust needed to hover, so recent valid voltage readings adjust the base thrust within a limited range. When readings time out, that compensation stops. It adjusts only the hover base thrust, not every PID correction. The program also compensates for tilt, which reduces the upward part of the total thrust.
+Stale voltage makes `kV=1`. The attitude/rate PID deltas and final four-motor
+mixer are intentionally outside this compensation path.
 
-If valid ToF readings temporarily stop, the height estimate is marked invalid, height-error accumulation pauses, and the previous correction fades rather than increasing thrust based on old height readings. See Automatic takeoff and landing below for prolonged range loss.
+The throttle stick moves the height target outside its center deadband. During
+automatic takeoff or landing, the automatic-flight state machine supplies the
+height target instead. A short ToF dropout fades the previous correction; it
+does not invent a new height measurement.
 
 ### 3. POS_HOLD: add horizontal control
 
-Position Hold adds horizontal drift correction to Altitude Hold. Start with `control_position.ino`:
+Position Hold adds an optical-flow cascade above the same attitude/rate loops:
 
-[![Position-control cascade](/media/figures/position-control.en.svg)](/media/figures/position-control.en.svg)
+```text
+position error -> desired horizontal velocity
+velocity error -> bounded roll/pitch target
+roll/pitch target -> attitude loop -> rate loop -> mixer
+```
 
-The program uses movement estimated from optical flow to choose a tilt that opposes drift. A stick movement requests a direction and speed and moves the target position; attitude control still keeps the aircraft stable.
+The controller runs only after its flow, height, level, airborne and yaw gates
+are valid. Pilot stick input moves the held point as a velocity command rather
+than bypassing stabilization. Near the floor, authority is deliberately
+reduced because optical-flow velocity becomes noisier. Pilot feed-forward,
+position feedback, and Offboard feed-forward are combined and then vector
+limited once by `POS_STICK_V`. If the flow gate drops or is still qualifying,
+`updateBoundedPositionFallback()` slews toward live pilot roll/pitch (or level)
+inside the same `12 deg` envelope; Position Hold never silently falls through
+to the wider Stabilize attitude command.
 
-Before enabling Position Hold, the program checks flow and range readings, whether the aircraft is airborne, whether tilt is small enough, and whether the yaw stick is asking for a substantial turn. Near the floor, some horizontal corrections are reduced to limit the effect of noisy low-height flow readings.
+## Mode and actuator ownership
 
-Some useful limits to follow in the code:
+The public modes are `STAB`, `ALT_HOLD`, and `POS_HOLD`. `AUTO` is an internal
+ownership state used by automatic takeoff, landing, and validated Offboard
+control.
 
-- Speed requests from sticks, position error and ROS are combined before `POS_STICK_V` limits the final horizontal speed.
-- When flow cannot currently support Position Hold, `updateBoundedPositionFallback()` still lets valid stick commands control tilt; without those commands, it targets level attitude. Tilt stays within the Position Hold limit of `12 deg`, rather than switching to the larger Stabilize tilt range.
-- Measured stationary flow offset is retained. If no reliable offset was measured and the code temporarily assumes zero offset, horizontal correction is limited to `3 deg` and velocity-error integration pauses.
+Normal priority is:
 
-## Which controller is in charge? {#mode-and-actuator-ownership}
+1. physical RC emergency-disarm gesture;
+2. active failsafe;
+3. automatic or validated Offboard owner;
+4. deliberate physical RC takeover;
+5. Android/ROS manual control lease.
 
-The usual choices are Stabilize (`STAB`), Altitude Hold (`ALT_HOLD`) and Position Hold (`POS_HOLD`). Automatic takeoff/landing and Offboard control use an internal `AUTO` state. Offboard means that a program outside the aircraft, such as ROS, continuously supplies control targets.
-
-One source must not arbitrarily overwrite another source's commands. Control authority follows these rules:
-
-- **Radio emergency stop is checked independently**, including during automatic takeoff/landing and Offboard control.
-- **A lost control link starts its own descent procedure.** Receiving network stick messages again does not directly resume normal control after the failsafe has started.
-- **Powering the receiver does not take over.** Ordinary radio takeover needs a deliberate action, not merely one received frame. Changing the radio mode switch during automatic takeoff/landing can cancel that automatic sequence and take over.
-- **Offboard and ordinary stick control are separate.** Leave Offboard or select an ordinary flight mode before sending phone or ROS manual stick commands.
+A powered receiver or one noisy SBUS frame cannot silently steal a GCS flight.
+A deliberate RC action can take ordinary control, and the RC emergency-disarm
+path remains independent even while AUTO or Offboard owns normal setpoints.
 
 ## Automatic takeoff and landing
 
-[![Automatic takeoff and landing](/media/figures/auto-flight-states.en.svg)](/media/figures/auto-flight-states.en.svg)
+```mermaid
+stateDiagram-v2
+    [*] --> IDLE
+    IDLE --> TAKEOFF: accepted takeoff request
+    TAKEOFF --> HOLD: goal reached and settled
+    TAKEOFF --> LAND_DESCEND: airborne fault or pilot abort
+    TAKEOFF --> IDLE: near-ground abort/disarm
+    HOLD --> LAND_DESCEND: accepted land request
+    LAND_DESCEND --> HOLD: pilot cancels landing with throttle
+    LAND_DESCEND --> LAND_FLARE: near ground
+    LAND_FLARE --> IDLE: touchdown confirmed / disarm
+```
 
-The flight controller breaks takeoff and landing into a sequence of small steps:
-
-During takeoff, it gradually raises the target height. Once that height is reached, the aircraft continues in the selected Altitude Hold or Position Hold mode. During normal takeoff and landing, valid ongoing stick commands can still adjust horizontal movement and turning. Position Hold also contributes horizontal corrections when selected.
-
-Landing first ends Offboard control, then lowers the target height, reduces thrust near the floor, confirms touchdown and disarms.
-
-When the control link is lost, the program chooses a response based on range data:
-
-- **Range data is still valid:** descend using height control and keep checking for ground contact.
-- **Range data is also lost:** gradually reduce thrust for at most `SF_DESCEND_TIME` (5 seconds by default), then stop the motors. Without reliable range measurements, this timeout is not recorded as confirmed touchdown.
-
-The latter response also handles prolonged range loss during automatic takeoff/landing. See `control_auto_flight.ino` and `safety.ino` for the triggering conditions.
+Automatic flight owns vertical motion only. A fresh pilot stream retains
+roll, pitch, and yaw authority throughout takeoff and landing. A successful
+takeoff hands over to the requested assisted mode; landing releases Offboard,
+descends, flares, confirms touchdown, then disarms.
 
 ## Android and ROS path
 
-Android and ROS 2 communicate with the flight controller using MAVLink, which defines messages for modes, takeoff/landing, control targets and aircraft state:
+Android and ROS 2 share the same firmware-facing MAVLink contract:
 
-[![Android / ROS command path](/media/figures/command-path.en.svg)](/media/figures/command-path.en.svg)
+```text
+client request / setpoint
+  -> UDP 14550
+  -> mavlink.ino validates and records it
+  -> control_modes / control_offboard / control_auto_flight owns it
+  -> normal altitude, position and stabilization loops
+  -> motors
+```
 
-The phone or ROS tells the aircraft what it should do. Attitude control and motor output still run on the aircraft. Before acting on a request, the firmware checks the sensors, aircraft state and whether commands have timed out.
+They do not implement a second flight controller. The clients request mode,
+arm, takeoff, land or bounded setpoints; the firmware remains responsible for
+pre-arm, sensor gates, timeouts, failsafe and motor output. Android and ROS
+must not own UDP `14550` simultaneously.
 
-Use one control client at a time for each aircraft. The firmware records the reply address and source port from a valid controller heartbeat and keeps that address fixed while armed. To switch clients on the ground, close the old client, wait 3 seconds, then connect the other one.
-
-QGC is an optional ground parameter tool. While disarmed, the aircraft accepts standard parameter messages for inspecting and changing settings; QGC is not used for takeoff or flight control in this project.
+QGC is a separate, optional ground maintenance tool. It uses the standard
+parameter messages in `mavlink.ino` while the aircraft is disarmed; it is not
+another supported pilot or Offboard owner.
 
 ## Parameters and calibration
 
-NVS is the chip's storage for settings that survive power-off. Startup loads valid saved values; if a setting has no saved value, it uses the source default.
+Compiled defaults live beside their owning controller and are registered in
+`parameters.ino`. NVS stores only explicit valid values. Missing keys use the
+compiled defaults, and startup does not silently rewrite a profile.
 
-Parameter changes are checked for allowed values, and ordinary parameter writes are rejected while armed. `syncParameters()` saves changed settings when there is no motor output; see [Flight-control main loop](#loop-timing).
+Keep these concepts separate:
 
-## Making and testing changes
+- `ca` measures accelerometer bias/scale; it is not PID tuning.
+- automatic gyro calibration estimates stationary gyro bias at boot.
+- `cr` measures the actual SBUS center/endpoints and channel mapping.
+- PID or estimator parameters change control behavior and require an isolated
+  flight issue plus controlled validation.
+
+## Safe modification workflow
 
 For a first contribution:
 
 1. reproduce one symptom and save its log;
-2. find the file responsible for that feature in the table above;
+2. identify the lowest owner file in the table above;
 3. change one behavior or one parameter family;
-4. add an automated test that reproduces the problem;
-5. run the tests and rebuild the firmware;
-6. flash the firmware and check sensors, motor order and emergency stop with
-   propellers removed before a short, low-altitude flight test.
+4. add or update a host contract that fails before the fix;
+5. run host tests and the pinned firmware build;
+6. only with separate authorization, perform propeller-off and guarded-flight
+   validation.
 
-When changing multiple modules, test them separately before testing them together.
-Keep interfaces and behavior unchanged during a refactor so that before-and-after results are easy to compare.
+Do not combine PID, estimator, TF-0850 geometry, automatic flight, Android and
+ROS changes in one experiment. Do not move logic across owner files while also
+changing it. A structural refactor should be reviewable as exact function-body
+movement plus comments/tests.
 
-## What you need to build the firmware {#pinned-firmware-toolchain}
+## What a passing build proves
 
-The commands below use these versions so the build environment can be reproduced:
+A clean diff, host tests and a successful compile prove source consistency and
+buildability. They do not prove that a binary was flashed, that a motor order
+is correct on a board, or that an aircraft flies safely. Continue with the
+evidence ladder in [Development](source-build.md) and the physical procedure in
+[Getting started](../guide/04-firmware-flight.en.md).
+
+## Pinned firmware toolchain
 
 | Dependency | Version |
 |---|---|
@@ -200,7 +284,7 @@ arduino-cli core install esp32:esp32@3.3.6 \
 arduino-cli lib install "FlixPeriph@1.10.4" "MAVLink@2.0.25"
 ```
 
-Run from the repository root to build for MPU6500/MPU9250. The directory below is temporary: move any firmware you need to keep into the project's `output/`, then remove the temporary build directory.
+Compile the standard MPU6500/MPU9250 profile into a disposable directory:
 
 ```bash
 arduino-cli compile \
@@ -210,7 +294,8 @@ arduino-cli compile \
   firmware
 ```
 
-Choose the IMU driver through a build option when using a different sensor. The later estimation and control code remains the same, but mounting direction, readings and calibration still need checking on that hardware:
+The IMU backend is selected at build time. Alternate profiles keep the same
+estimator/control interface but need their own hardware validation:
 
 ```bash
 arduino-cli compile --clean \
@@ -226,154 +311,62 @@ arduino-cli compile --clean \
 
 Do not compile multiple backend profiles concurrently against one Arduino
 cache. A clean sequential build avoids reusing objects compiled with another
-backend macro. After changing an IMU, check its mounting direction and readings,
-then complete calibration and motor checks.
+backend macro. CI compiles the default and both alternate profiles this way;
+only the default profile currently carries standard-airframe flight evidence.
 
 The two relevant artifacts are different:
 
 - `firmware.ino.merged.bin`: complete USB image, written at `0x0`;
 - `firmware.ino.bin`: application image for A/B OTA only.
 
-Use the full image at `0x0` over USB for the first installation and the application image for phone OTA. They are not interchangeable.
+Never send a merged image to the OTA endpoint. Never write an app-only image at
+`0x0` and call it a complete flash.
 
-## Command-line flashing (optional) {#usb-flash}
+## USB flash
 
-For a normal installation, use the [browser flasher](../guide/04-firmware-flight.en.md#flashing). Use the method below for offline or command-line operation. Download the full firmware from the [Release](https://github.com/npu-ius-lab/open32drone/releases/latest) and open a terminal in its download folder. Replace the example filename with the one you downloaded.
-
-Install [Python 3.10 or later](https://www.python.org/downloads/). These instructions pin esptool 5.1.0 and pyserial 3.5 in a separate virtual environment; pyserial also provides port listing and a calibration terminal. Follow only the steps for your operating system.
-
-### Windows (PowerShell)
-
-Reopen PowerShell after installing Python. In the download folder's address bar, type `powershell` and press Enter:
-
-```powershell
-py -3 --version
-py -3 -m venv .venv
-.\.venv\Scripts\python.exe -m pip install "esptool==5.1.0" "pyserial==3.5"
-.\.venv\Scripts\python.exe -m esptool version
-.\.venv\Scripts\python.exe -m serial.tools.list_ports -v
-```
-
-Python must be at least 3.10. Note the serial port shown in Device Manager or by the last command, such as `COM5`. Follow “Enter download mode, flash and restart” below, then replace the example port with your actual port:
-
-```powershell
-.\.venv\Scripts\python.exe -m esptool --chip esp32s3 --port COM5 erase-flash
-.\.venv\Scripts\python.exe -m esptool --chip esp32s3 --port COM5 --baud 460800 write-flash 0x0 .\Open32Drone-20260928-190250-full.bin
-```
-
-### macOS (Terminal)
-
-After installing Python, type `cd ` in Terminal, including the trailing space, drag the download folder into the terminal and press Enter:
+For a first board, partition migration, or full reset:
 
 ```bash
-python3 --version
-python3 -m venv .venv
-.venv/bin/python -m pip install "esptool==5.1.0" "pyserial==3.5"
-.venv/bin/python -m esptool version
-.venv/bin/python -m serial.tools.list_ports -v
+python3 -m esptool --chip esp32s3 erase-flash
+python3 -m esptool --chip esp32s3 --baud 921600 \
+  write-flash 0x0 /private/tmp/open32drone-build/firmware.ino.merged.bin
 ```
 
-Note the USB serial port, such as `/dev/cu.usbmodem1101`. Enter download mode and replace the example with your actual port:
-
-```bash
-.venv/bin/python -m esptool --chip esp32s3 --port /dev/cu.usbmodem1101 erase-flash
-.venv/bin/python -m esptool --chip esp32s3 --port /dev/cu.usbmodem1101 --baud 460800 write-flash 0x0 Open32Drone-20260928-190250-full.bin
-```
-
-### Ubuntu / Debian (Terminal)
-
-Install Python virtual-environment support, then change to the download folder for the remaining commands:
-
-```bash
-sudo apt update
-sudo apt install python3 python3-venv
-python3 --version
-python3 -m venv .venv
-.venv/bin/python -m pip install "esptool==5.1.0" "pyserial==3.5"
-.venv/bin/python -m esptool version
-.venv/bin/python -m serial.tools.list_ports -v
-```
-
-Note the serial port, such as `/dev/ttyACM0`. Enter download mode and replace the example with your actual port:
-
-```bash
-.venv/bin/python -m esptool --chip esp32s3 --port /dev/ttyACM0 erase-flash
-.venv/bin/python -m esptool --chip esp32s3 --port /dev/ttyACM0 --baud 460800 write-flash 0x0 Open32Drone-20260928-190250-full.bin
-```
-
-### Enter download mode, flash and restart
-
-1. Connect the XIAO with a USB data cable. Hold **BOOT**, press **RESET**, then release **BOOT**.
-2. Check the port again: download mode may use a different port from normal boot.
-3. Close serial monitors and run the two flash commands for your operating system. **erase-flash removes calibration, parameters and Wi-Fi settings**. This procedure is for first installation or full recovery, rather than a routine update that preserves settings.
-4. Wait for successful completion, then press RESET to boot normally. Write the full image at `0x0`; do not substitute the app image.
-
-### Open the serial port
-
-List ports again after flashing. From the same folder, open the normal-boot port at 115200 baud:
-
-```powershell
-# Windows: replace COM5 with the normal-boot port
-.\.venv\Scripts\python.exe -m serial.tools.miniterm COM5 115200 --eol LF
-```
-
-```bash
-# macOS; on Linux, replace the port with /dev/ttyACM0
-.venv/bin/python -m serial.tools.miniterm /dev/cu.usbmodem1101 115200 --eol LF
-```
-
-Press `Ctrl+]` to exit. After opening the terminal, press RESET once, leave the aircraft level and still, and wait for:
-
-```text
-Initializing complete
-Gyro calibration complete
-```
-
-Then return to [Preflight preparation](../guide/04-firmware-flight.en.md#preflight).
-
-### Troubleshooting
-
-| Symptom | Action |
-|---|---|
-| No serial port | Try a known data cable, connect directly to the computer and enter BOOT again; rule out a charge-only cable first |
-| Unknown USB device on Windows | Check the model in Device Manager and follow the [official XIAO instructions](https://wiki.seeedstudio.com/xiao_esp32s3_getting_started/); do not install CH340/CP210x drivers without checking |
-| Port busy | Close serial terminals and IDE monitors, then flash again |
-| Permission denied on Linux | Run `sudo usermod -aG dialout "$USER"`, log out and back in; do not install Python packages with sudo |
-| Stuck on Connecting | Enter BOOT again, list ports and check the USB connection |
-| Interrupted write | Change `--baud 460800` to `--baud 115200` and retry |
-| Firmware file not found | Check that the terminal is in the download folder and the browser has not added a duplicate-download suffix to the filename |
-
-Tool reference: [Espressif esptool installation instructions](https://docs.espressif.com/projects/esptool/en/latest/esp32/installation.html). Do not proceed to first flight if flashing fails.
+After a complete erase, run `ca`; run `cr` if SBUS is used. Wi-Fi credentials
+also return to the compiled defaults.
 
 ## Android build
 
 ```bash
-cd android
+cd software/android
 ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
 ```
 
 Debug APK:
 
 ```text
-android/app/build/outputs/apk/debug/app-debug.apk
+software/android/app/build/outputs/apk/debug/app-debug.apk
 ```
 
-The Android application is version `0.1.2` (`versionCode 3`). Use it with firmware from the same source revision.
-
-After changing the app, check aircraft-hotspot connectivity, rejection of other aircraft's packets, reconnection, one-button takeoff/landing, stick input during takeoff/landing, radio takeover and emergency stop. Video runs on a separate thread below control-communication priority; displaying video does not control the aircraft.
+The Android application starts at version `0.1` (`versionCode 1`) and is paired
+with Open32Drone firmware from the same source revision. The application must retain direct
+aircraft-Wi-Fi route binding, selected-aircraft packet isolation,
+stale-socket recovery, atomic takeoff, live takeoff/landing stick authority,
+physical-SBUS priority, and an independent emergency stop. Its optional MJPEG
+preview runs below control-thread priority and is not a control source.
 
 ## ROS 2 build
 
 ```bash
 mkdir -p ~/osdrone_ws/src
-cp -a ros2 ~/osdrone_ws/src/open32drone_driver
+cp -a software/ros2 ~/osdrone_ws/src/open32drone_driver
 cd ~/osdrone_ws
 rosdep install --from-paths src --ignore-src -r -y
 colcon build --symlink-install
 source install/setup.bash
 ```
 
-The ROS package manifest uses `0.1.2`; use it with firmware and Android clients
+The ROS package manifest uses `0.1.0`; use it with firmware and Android clients
 from the same source revision.
 
 For a workspace that should follow repository edits directly, use a symlink
@@ -381,10 +374,12 @@ instead of the copy command above when creating a new workspace:
 
 ```bash
 mkdir -p ~/osdrone_ws/src
-ln -s /path/to/open32drone/ros2 ~/osdrone_ws/src/open32drone_driver
+ln -s /path/to/open32drone/software/ros2 ~/osdrone_ws/src/open32drone_driver
 ```
 
-Edit existing nodes under `ros2/open32drone_driver/`. For a new executable node, register its entry point in `setup.py` and update `launch/` if it should start with other nodes. Then rebuild this package:
+Keep the development loop small: edit nodes under
+`software/ros2/open32drone_driver/`, register an entry point in `setup.py`, update
+`launch/` only when a launch argument changes, then rebuild this package:
 
 ```bash
 cd ~/osdrone_ws
@@ -397,58 +392,113 @@ After starting the ROS stack described in section 3 of the ROS guide, run
 second terminal. Normal applications use the published `cmd_vel`, odometry,
 command topic, and services; do not replicate firmware arming, takeoff, or
 landing state machines in another node. See [ROS 2 control](../guide/06-ros.en.md) for the
-interface and first-flight sequence. If MAVLink fields or the handling of arming, takeoff or landing change, also check the firmware, Android app and related tests.
+interface and first-flight sequence. Update firmware, Android, and contract
+tests together only when the shared MAVLink fields or lifecycle contract
+change.
 
-## Running tests on your computer {#host-validation}
+## Host validation
 
 Run from the repository root:
 
 ```bash
-python3 -m compileall -q ros2
-python3 -m unittest discover -s tests -p 'test_*.py' -v
+python3 -m compileall -q software/ros2
+python3 -m unittest discover -s software/tests -p 'test_*.py' -v
 git diff --check
 ```
 
 Android validation:
 
 ```bash
-cd android
+cd software/android
 ./gradlew --no-daemon testDebugUnitTest lintDebug assembleDebug
 ```
 
-Automated tests cover:
+The contracts cover:
 
-- hardware pins, motor channel configuration, modes, preflight checks and link-loss conditions;
-- gyroscope, accelerometer and radio calibration, plus settings storage;
-- TF-0850 parsing, valid flow/range conditions, IMU mounting direction and parameters;
+- hardware pins, motor attachment, modes, pre-arm and failsafe gates;
+- transactional gyro/accelerometer/RC calibration and NVS behavior;
+- TF-0850 parsing, flow/ToF gates, compiled mounting offset, and parameters;
 - supported MAVLink commands, telemetry, voltage input, and A/B OTA;
-- loop scheduling and timeout statistics, IMU build options, and sending of parameters and aircraft state;
+- fixed-rate scheduling, deadline accounting, build-selectable IMU profiles,
+  bounded parameter streaming, and serialized periodic telemetry;
 - Android command, stick, route, selected-aircraft isolation, camera priority,
   reconnect, and version contracts;
-- ROS control calculations, command sources, topics, coordinate transforms and OTA upload checks;
-- basic repository shape and bilingual document links.
+- ROS control math, ownership, topics, TF, and OTA upload validation;
+- minimal repository shape and bilingual document links.
 
-After rebuilding, also check sensors, motor output and controls on the aircraft.
+Tests are safeguards, not physical-flight proof.
 
-## After compiling
+## Hardware validation ladder
 
-1. Remove propellers, flash the new firmware and check that it starts normally.
-2. Check IMU, ToF, battery voltage and the connection to your controller.
-3. Check motor numbering, rotation, disarming and emergency stop.
-4. Complete [preflight preparation](../guide/04-firmware-flight.en.md#preflight), then perform a short, low-altitude takeoff and landing in a clear area.
-5. If anything is wrong, save the log and diagnose it before continuing.
+| Level | Procedure | What may be claimed |
+|---|---|---|
+| Source | contracts, unit tests, software/firmware/APK/ROS builds | source and build contract only |
+| USB/boot | hash, flash log, boot ID, parameters | that artifact runs on that MCU |
+| Propeller-off bench | IMU, ToF, RC/MAVLink, motor order, emergency stop | interfaces and gates on that device |
+| Guarded hover | one takeoff, hover, landing, log | behavior on that airframe/setup |
+| Repeated flight | batteries, airframes, operators, environments | reproducibility only within measured conditions |
 
-## How OTA updates work
+Keep these evidence levels separate in reviews and release notes.
 
-The phone uploads application firmware over HTTP `8080` together with its SHA-256 checksum. The controller writes it into the other application partition, leaving the running firmware untouched. Keeping old and new firmware in separate slots is called A/B OTA.
+## Packaging contract
 
-Updates are allowed only on the ground, while disarmed and with no motor output. Automatic takeoff/landing, Offboard control or a previous update awaiting startup checks also prevent a new update.
+Public firmware builds must not embed a developer's home path through compiler
+assertion strings. Add both build properties to the standard command:
 
-After restart, the program checks settings storage, IMU readings, gyro calibration, the main loop, TF-0850 and Wi-Fi. The new firmware is confirmed only after these remain healthy for the required interval. If checks do not pass before the timeout, it returns to the old firmware. See `ota.ino`.
+```bash
+--build-property "compiler.c.extra_flags=-ffile-prefix-map=${HOME}=/build"
+--build-property "compiler.cpp.extra_flags=-ffile-prefix-map=${HOME}=/build"
+```
 
-## Before submitting a change
+These are compiler path mappings, not control parameter changes. Inspect both
+application and merged binaries for personal paths/credentials after rebuilding.
+Check licenses before redistribution. A new binary needs its own device checks.
 
-- Run the relevant tests and check that firmware, Android and ROS 2 still build.
-- When changing control messages or interfaces, check both firmware and client handling.
-- Update both language versions when features or operating steps change.
-- Describe the change, test method and results in your PR. See [Contributing](../project/contributing.md).
+Copy approved deliverables into `output/` with deterministic names:
+
+```text
+Open32Drone-minimal-app.bin
+Open32Drone-minimal-merged.bin
+Open32Drone-Controller-0.1.apk
+Open32Drone-ROS2-minimal.tar.gz
+Open32Drone-minimal-BUILD_INFO.md
+SHA256SUMS
+```
+
+`BUILD_INFO` must record:
+
+- source commit and tree/dirty state;
+- tool and dependency versions;
+- exact build commands;
+- source hashes and artifact hashes;
+- validation actually performed;
+- validation explicitly not performed.
+
+Generate SHA-256 after the final copy and verify it from `output/`. Firmware,
+APK, and ROS archives in one delivery must come from the same source revision.
+Updating a tracked package, committing, pushing, tagging, or publishing a
+hosting-platform release are separate authorized operations.
+
+## OTA development boundary
+
+OTA listens on HTTP `8080`, requires the app-image SHA-256 header, and writes
+only the inactive partition. It must remain rejected while armed, airborne,
+motor-active, automatic, Offboard, or pending validation. The new slot is marked
+valid only after storage, IMU, gyro, loop, TF-0850, and Wi-Fi remain healthy for
+the boot-validation interval; otherwise rollback remains available.
+
+## Review checklist
+
+- Scope matches one current issue.
+- No unrelated tuning or automatic parameter rewrite was added.
+- Firmware/client ownership and timeout behavior are explicit.
+- English and Chinese operator docs both changed when behavior changed.
+- Protocol changes update firmware, Android, ROS 2, and tests together.
+- No QGC flight-control dependency, mission, direct motor, or complex collision
+  surface returned; the optional camera remains background-only and optional
+  QGC access remains ground parameters only.
+- `git diff --check`, relevant unit tests, and builds pass.
+- Control contracts read all `control*.ino` owner modules, not only the shared
+  `control.ino` tab.
+- Hardware claims name the exact artifact, device, and test level.
+- Local deliverables are in `output/`; disposable build directories are removed.
