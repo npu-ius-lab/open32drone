@@ -1,5 +1,19 @@
 # 01 · 项目介绍
 
+## 文档导航 {#documentation}
+
+<div class="home-doc-nav">
+
+| 分类 | 文档与资源 |
+|---|---|
+| 制作教程 | [采购与组装](03-hardware.md) · [刷写与首飞](04-firmware-flight.md) · [调参与排查](05-tuning.md) |
+| 编程与仿真 | [ROS 2 控制](06-ros.md) · [仿真与强化学习](07-rl.md) |
+| 开发参考 | [源码与编译](../reference/source-build.zh-CN.md) · [参数与接口](../reference/firmware.zh-CN.md) |
+| 项目资源 | [软件下载](https://github.com/npu-ius-lab/open32drone/releases) · [PCB 设计](https://oshwhub.com/fanchewang/open32drone) · [机架打印](https://makerworld.com.cn/zh/models/2922108-open32drone-wu-ren-ji-8520kong-xin-bei-ji-jia-ros2#profileId-3425842) |
+| 参与项目 | [GitHub 仓库](https://github.com/npu-ius-lab/open32drone) · [参与贡献](../project/contributing.zh-CN.md) · [许可证与来源](../project/third-party.zh-CN.md) |
+
+</div>
+
 ## Open32Drone 是什么
 
 Open32Drone 是一个用于教学、科研和个人制作的开源微型四旋翼项目。从打印机架、焊接电路开始，你可以组装一架飞机，再用手机、遥控器或 ROS 2 控制它。

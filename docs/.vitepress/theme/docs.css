@@ -29,6 +29,23 @@
   pointer-events: none;
 }
 
+.vp-doc .home-doc-nav table {
+  display: table;
+  width: 100%;
+  table-layout: fixed;
+}
+
+.vp-doc .home-doc-nav th:first-child,
+.vp-doc .home-doc-nav td:first-child {
+  width: 28%;
+}
+
+.vp-doc .home-doc-nav th,
+.vp-doc .home-doc-nav td {
+  vertical-align: top;
+  overflow-wrap: anywhere;
+}
+
 .vp-doc .download-actions p {
   display: flex;
   flex-wrap: wrap;
@@ -126,6 +143,13 @@
 }
 
 @media (max-width: 640px) {
+  .vp-doc .home-doc-nav th:first-child,
+  .vp-doc .home-doc-nav td:first-child {
+    width: 36%;
+    padding-left: 8px;
+    padding-right: 8px;
+  }
+
   .purchase-grid,
   .video-grid { grid-template-columns: 1fr; }
 }
