@@ -20,8 +20,6 @@ Prepare the parts and tools below.
 | Flashing and calibration | Chrome or Edge for the web flasher; CoolTerm for serial commands |
 | Printing | Use your slicer if printing yourself, or have the supplied model printed for you; CAD software is unnecessary |
 
-Ready-built firmware and APK are provided. Arduino IDE, ESP-IDF, Android Studio, ROS and simulator environments are not prerequisites. Install development tools only when reaching the corresponding chapter.
-
 ## 2.2 Parts
 
 Frame files are listed under “Frame printing” below. Get the PCB design and onboard electronic BOM from the [JLC project](https://oshwhub.com/fanchewang/open32drone). Use the list below for other modules and mechanical parts; assembly tools are listed in the previous section.
@@ -214,9 +212,13 @@ Use `hardware/3d-model/open32drone-frame.stp` to modify the structure or inspect
 
 ## 2.4 PCB soldering
 
+Before soldering, reworking a joint or checking continuity, disconnect the battery and USB, remove the XIAO and leave the motors disconnected. Connect the selected power source only when measuring supply voltages, with the multimeter set to DC voltage. Do not use continuity or resistance mode on a powered board.
+
 ### 1. Sort the components
 
 Separate resistors, capacitors, diodes, MOSFETs, connectors, headers and modules. Work with one group at a time and mark installed parts on the placement drawing. Check Pin 1, cathode markings and connector openings before placing polarized parts.
+
+Check the IMU module's supply requirements, pin order and mounting orientation first. The `3V3` and `5V0` solder jumpers on the back select its supply voltage. Choose the setting for the actual module; a chip name such as MPU9250 alone does not establish that the module accepts 5 V.
 
 ![PCB, connectors and modules laid out](/media/photos/parts-layout.jpg)
 
@@ -233,6 +235,8 @@ Clean the pads and apply an even layer of solder paste or pre-tin them. Start wi
 
 Check from above that each part is centered, then from the side that both ends sit on their pads. Adjust misaligned parts before heating. Remove bridges with flux and solder wick rather than repeatedly pushing adjacent components with the iron.
 
+**After placing this group:** Check resistor and capacitor values against the BOM and placement drawing. Verify diode orientation and MOSFET pin alignment, and check that small parts are not standing on end or touching adjacent pads. Correct placement before soldering, while the parts are still accessible.
+
 ![Surface-mount component placement](/media/photos/smd-placement.jpg)
 
 <p class="figure-caption">Figure 2-3. Positioned surface-mount components. Use the nose arrow on the board as the orientation reference throughout assembly.</p>
@@ -240,6 +244,8 @@ Check from above that each part is centered, then from the side that both ends s
 ### 3. Solder the board
 
 On a hotplate, keep the PCB flat against the working surface and follow the solder's specified preheat, reflow and cooling profile. Watch for parts aligning as the solder melts, then let the board cool naturally before moving it. With a soldering iron, tack one pin, recheck orientation and position, then solder the remaining joints.
+
+**After soldering this group:** Each pin should have a continuous solder connection to its pad, with no lifted pins, bridges or loose joints. Connectors should sit flush against the board and accept their plugs normally. With power disconnected, check continuity between each connector pin and its corresponding pad, then use the schematic to check for unintended connections between pins. A shiny joint alone is not proof of a good connection.
 
 ![Soldered connectors and surface-mount components](/media/photos/connectors-soldered.jpg)
 
@@ -253,27 +259,72 @@ Use a magnifier to inspect the power input, four motor-driver circuits, headers 
 
 <p class="figure-caption">Figure 2-5. Board after soldering. Pay particular attention to the four motor outputs and central component area.</p>
 
-With power disconnected, use a multimeter to check for a short across the battery terminals and verify connections on both sides of the power switch. For the first power-up, use a current-limited supply or a protected 1S battery. Disconnect immediately if you notice abnormal heat, smell or rapidly rising current.
+Complete these checks with power disconnected before installing the power board:
+
+- Check for a persistent low-resistance short between the battery input terminals. Capacitor charging may cause a brief continuity beep; wait for the reading to settle before deciding that there is a short.
+- Check continuity in each power-switch position against the schematic. If the reading does not change when the switch moves, inspect its pins for missing solder or bridges.
+- Check each of the four motor connectors against its corresponding driver pads, with no unintended connection to an adjacent channel. Continuity confirms the wiring path only. Test motor-driver operation with the propellers removed in the next chapter.
+
+If you suspect a short, remove solder bridges and loose solder beads, then measure again. Do not power the board and use overheating to locate a soldering fault.
 
 ### 5. Fit headers and modules
 
-Install the power board on the back first, matching input, output and GND to the main-board silkscreen. Then solder the XIAO female headers, keeping both rows parallel so the XIAO fits without force.
+**Solder the power board first.** Align the boost module with `IN+`, `IN−`, `OUT+` and `OUT−` in the `DC-DC` area on the back. Its input connects to the battery side and its output to the main board's 5 V supply. These four matching pads connect the module to the baseboard. Tack one connection, recheck orientation and position, then solder the other three. Avoid large solder blobs that bridge adjacent pads.
 
 ![Power board on the back](/media/photos/power-board.jpg)
 
 <p class="figure-caption">Figure 2-6. Mounting the power board on the back of the main board.</p>
 
+**After soldering the power board:** All four connections should be secure. The module must not rock or press against exposed joints underneath. With power disconnected, check for persistent low-resistance shorts across `IN+` and `IN−`, and across `OUT+` and `OUT−`. Check continuity from each module terminal to the matching main-board pad. For the first power-up, leave the XIAO, IMU and motors disconnected. Prefer a current-limited supply set to simulate a 1S battery, and check that `OUT+` measures approximately 5 V relative to `OUT−`. If there is no output, check the input supply, switch and four soldered connections. If the output differs substantially from 5 V, check the boost module's specifications and wiring. Disconnect immediately if you notice abnormal heat, smell or rapidly rising current.
+
+**Next, solder the male and female headers.** Keep the two XIAO female-header rows parallel and at the same height. Tack one joint on each row and test-fit the XIAO without force, then remove it before soldering the remaining pins. Fit the power-selection header at this stage too, but leave the jumper cap off for now.
+
 ![Female headers and board connections](/media/photos/headers.jpg)
 
 <p class="figure-caption">Figure 2-7. Check header height and alignment from the side after soldering.</p>
 
-Install the IMU separately on the controller board, following the axis markings. Secure it rigidly after soldering; thick, soft foam can let it move. The standard firmware uses IMU mounting rotation `roll=π`, `pitch=0`, `yaw=π/2`. The matching PCB and illustrated mounting correspond to these settings.
+**After soldering the headers:** Inspect every pin for missing solder, bridges or lifted pads. The female headers should not move when gently pushed. Check continuity from each socket contact to the corresponding connection on the board, including joints that look complete but may not conduct. If inserting the XIAO requires bending its pins, adjust the headers instead of forcing it into place.
+
+**Set the main-board power jumper.** On this PCB revision, move the jumper cap between pin pairs to select the power source:
+
+- **USB power:** Place the cap on the pair marked `ON/OFF`, then supply power through the XIAO's USB-C port.
+- **Battery power:** Move the cap from the `ON/OFF` pair to the other pair used for battery power, then connect the battery.
+
+Disconnect both the battery and USB before moving the cap. For the first check, connect only the selected source and verify the main-board supply before installing the remaining modules.
+
+**After fitting the jumper cap:** Its internal contacts must engage both intended pins. Make sure it is fully seated and not fitted over just one pin. With power disconnected, check continuity through the selected supply path against the schematic. Then apply power and check for approximately 5 V between the main-board 5 V rail and GND. Battery power can be tested without the XIAO fitted. USB power enters through the XIAO, so first check the female headers for shorts, then insert the XIAO and connect USB. If voltage is present at the source but absent at the main board, check the cap's position, contacts and header joints. This jumper selects the power source; the solder jumpers below separately select the IMU's 3.3 V or 5 V supply.
+
+**Select the IMU supply voltage.** Before installing the IMU, locate the two solder-jumper pairs marked `5V0` and `3V3` on the back of the main board. Connect only one pair, according to the module's supply requirements:
+
+| Selected IMU supply | Solder-jumper connection |
+|---|---|
+| 3.3 V | Bridge the two `3V3` pads and leave `5V0` open |
+| 5 V | Bridge the two `5V0` pads and leave `3V3` open |
+
+Use a 0 Ω resistor or a solder bridge as specified by the BOM for your PCB revision. Modules from different manufacturers may use different regulators and pull-up circuits even when they contain the same IMU chip. Check the module's supply and I²C voltage requirements before buying. **Never bridge both pairs or short the `3V3` and `5V0` rails together.**
+
+**After completing the solder jumper:** With power disconnected, check continuity across the selected pair and confirm that the other pair has neither a resistor nor a solder bridge. Before connecting the IMU, verify the supply at the XIAO headers, temporarily insert the XIAO and apply the selected power source. Measure the IMU supply pin relative to GND: it should read approximately 3.3 V or 5 V, as selected. The `3V3` setting uses the XIAO's 3.3 V output, so a missing voltage with the XIAO removed does not by itself indicate a soldering fault. Once the voltage is correct, disconnect all power and remove the XIAO before soldering the IMU.
+
+**Solder the IMU last.** The matching module uses four connections for I²C: supply, ground, clock and data. In the orientation shown in Figure 2-8, the main-board IMU connections are `?V`, `GND` and the two communication pins below them, `SCL/SCLK` and `SDA/MOSI`. Connect the module as follows:
+
+| IMU module pin | Main-board IMU connection | Function |
+|---|---|---|
+| `VCC` (labelled `VIN` on some modules) | `?V`, with voltage selected by the solder jumper on the back | Module supply |
+| `GND` | `GND` | Common ground |
+| `SCL` / `SCL/SCLK` | `SCL/SCLK`, connected to XIAO `GPIO43` | I²C clock |
+| `SDA` / `SDA/SDI` | `SDA/MOSI`, connected to XIAO `GPIO2` | I²C data |
+
+Fit header pins only to these four positions on the illustrated module. Its `VCC` pin must align with the main board's `?V` supply hole. Do not shift it up to the separate `5V` hole, which would bypass the selected IMU supply voltage. `EDA` and `ECL` are auxiliary communication pins, not substitutes for the `SDA` and `SCL` connections used here. Leave the other pins as shown. If using a different module, check its documentation for I²C mode and address settings.
+
+Align the IMU with the board's axis markings. Tack one pin, check that all four pins are in the correct positions, then solder the remaining pins. Secure it rigidly; thick, soft foam can let it move. The standard firmware uses IMU mounting rotation `roll=π`, `pitch=0`, `yaw=π/2`. The matching PCB and illustrated mounting correspond to these settings.
 
 ![IMU silkscreen and pins](/media/photos/imu-module.jpg)
 
 ![IMU installed on the controller board](/media/photos/imu-installed.jpg)
 
 <p class="figure-caption">Figure 2-8. IMU module and completed controller board.</p>
+
+**After soldering the IMU:** With power disconnected, check all four paths: `VCC` to the selected supply, `GND` to main-board ground, `SCL` to `GPIO43` and `SDA` to `GPIO2`. Check that solder bridges have not connected the signal lines to power, ground or each other. Apply power and measure the actual voltage between the module's `VCC` and `GND`. After flashing matching firmware, use the `imu` command described in the next chapter to check sensor status. If the startup log reports `IMU initialization failed`, check supply, common ground, SCL/SDA order and poor joints first, then verify the module model and firmware. Continue with aircraft calibration only after detection succeeds and gyro calibration completes with the board stationary.
 
 The board should now contain the motor drivers, power circuitry, XIAO headers and IMU. The optical-flow/ToF module connects by cable and is fitted to the frame next.
 
