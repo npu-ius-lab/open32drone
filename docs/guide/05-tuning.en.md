@@ -38,9 +38,13 @@ p CTL_R_P
 p CTL_R_P 4.02
 ```
 
-Writes are saved to NVS. Record the old value first, then wait one second after writing and read it back.
+::: warning Save the original parameters before editing
+Writes are saved to NVS; rebooting does not restore the old values. Save the current parameter list with `p` and **change only one value at a time**. Wait one second after writing, then read it back. Restore the old value if flight behavior worsens.
+:::
 
 ## 4.3 Attitude oscillation and return to level
+
+After changing propellers, check whether the existing PID gains still suit the aircraft. Diameter, pitch and mass affect thrust and motor response, so even propellers with the same diameter may need different gains. First check that the propellers, motors and power supply are compatible, then compare short flight logs as described in [Compare two flights using logs](#_4-7-compare-two-flights-using-logs).
 
 Standard attitude parameters are:
 
@@ -114,19 +118,27 @@ Calibrate `PWR_VOLT_SCALE` with `pw` and a multimeter first. Repeat the same 5-s
 
 ## 4.7 Compare two flights using logs
 
-With the aircraft disarmed, run:
+After landing, disarming and waiting for the motors to stop, run this command in a serial terminal such as CoolTerm to view the flight log:
 
 ```text
 log dump
 ```
 
-Save the CSV, then use the repository's analysis script:
+::: warning Export before power-off, reboot or rearming
+The current firmware logs at **25 Hz** while armed. Its RAM ring buffer retains only the **most recent approximately 12 seconds**. Logging stops when disarmed. Rearming clears the previous log, and power loss or reboot also erases it. If connecting USB or opening the serial port resets the controller, that flight's log can no longer be exported. `log dump` is rejected while armed.
+:::
+
+Save the complete terminal output separately, then prepare `flight.csv` for analysis. Keep the header beginning with `t,rates.x,...` and the numeric rows below it. Remove the echoed command, `Log samples: ...` and any other status messages. Keep the header with the data; `t` is in seconds. Also save the parameters used for this flight with `p`.
+
+The repository's script checks the CSV and summarizes voltage, motor commands and sampling intervals:
 
 ```bash
 python3 simulation/course/analyze_log.py \
   --csv /path/to/flight.csv \
   --output output/my-flight-analysis
 ```
+
+It produces `log-summary.json`; it does not automatically plot all signals or calculate PID gains. For attitude, altitude and position-hold response, use a plotting tool or give the CSV to an AI tool that can read files and plot data.
 
 Compare at least these curves or fields:
 
@@ -136,6 +148,18 @@ Compare at least these curves or fields:
 - Four motor outputs and any saturation.
 - Battery voltage and compensation.
 - Times immediately before and after the problem.
+
+### AI-assisted log analysis and tuning
+
+Provide the flight CSV, the output of `p` and the firmware version. Include the propeller model, diameter and pitch if known, motors, battery, takeoff mass, flight mode and the times when oscillation or drift occurred. Logs from before and after a propeller change are particularly useful for comparison.
+
+For example:
+
+> These are Open32Drone flight logs and current parameters. The attached notes describe the propellers and aircraft configuration. First check log completeness, sensor validity and abnormal voltage, then plot target and measured attitude, angular rates, altitude and motor outputs. Use the marked problem intervals to distinguish possible mechanical vibration, insufficient thrust and unsuitable controller gains. If tuning is warranted, use parameter names that actually appear in the supplied list. Explain the evidence, identify one parameter to adjust first, suggest a small change and state what to observe on the next short flight. If the evidence is insufficient, identify the missing data.
+
+::: tip Validate tuning suggestions with flight logs
+AI can help locate problem intervals, compare curves and suggest PID or hover-thrust adjustments. **Validate each suggested change in a short flight.** The 25 Hz log cannot reliably characterize high-frequency vibration, and one hover does not establish PID gains suitable for every propeller. Change one value at a time and retain the original value and before/after logs.
+:::
 
 Record the original parameter, new value, maneuver and observation each time, using the same maneuver for comparison. Keep improvements and continue in small steps; restore the old value if the result worsens. Save the records so you can look up which parameters this aircraft has used and how they performed.
 
@@ -225,9 +249,7 @@ values remain active.
 
 ### Two identical aircraft do not fly identically
 
-The default controller parameters should remain common across the standard
-airframe. Per-aircraft differences should first be handled mechanically and by
-`ca`/`cr`, not by hidden trim:
+Aircraft with the same frame, motors and propellers can start from the same default controller parameters. Check mechanical assembly and `ca`/`cr` calibration first when their behavior differs; do not hide faults with trim. After changing propellers or the propulsion setup, reassess the gains using the log procedure above. Check:
 
 - motor and propeller model/direction;
 - bent shafts, loose arms, or unequal motor height;

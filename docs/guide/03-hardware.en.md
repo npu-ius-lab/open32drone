@@ -212,7 +212,9 @@ Use `hardware/3d-model/open32drone-frame.stp` to modify the structure or inspect
 
 ## 2.4 PCB soldering
 
-Before soldering, reworking a joint or checking continuity, disconnect the battery and USB, remove the XIAO and leave the motors disconnected. Connect the selected power source only when measuring supply voltages, with the multimeter set to DC voltage. Do not use continuity or resistance mode on a powered board.
+::: danger Disconnect power before soldering or checking continuity
+**Disconnect the battery and USB, remove the XIAO and leave the motors disconnected.** Solder, rework and check continuity only with power off. Connect the selected power source only when measuring supply voltages, with the multimeter set to DC voltage. **Do not use continuity or resistance mode on a powered board.**
+:::
 
 ### 1. Sort the components
 
@@ -285,12 +287,14 @@ If you suspect a short, remove solder bridges and loose solder beads, then measu
 
 **After soldering the headers:** Inspect every pin for missing solder, bridges or lifted pads. The female headers should not move when gently pushed. Check continuity from each socket contact to the corresponding connection on the board, including joints that look complete but may not conduct. If inserting the XIAO requires bending its pins, adjust the headers instead of forcing it into place.
 
-**Set the main-board power jumper.** On this PCB revision, move the jumper cap between pin pairs to select the power source:
+::: warning Check the jumper position before applying power
+On this PCB revision, move the jumper cap between pin pairs to select the power source:
 
 - **USB power:** Place the cap on the pair marked `ON/OFF`, then supply power through the XIAO's USB-C port.
 - **Battery power:** Move the cap from the `ON/OFF` pair to the other pair used for battery power, then connect the battery.
 
 Disconnect both the battery and USB before moving the cap. For the first check, connect only the selected source and verify the main-board supply before installing the remaining modules.
+:::
 
 **After fitting the jumper cap:** Its internal contacts must engage both intended pins. Make sure it is fully seated and not fitted over just one pin. With power disconnected, check continuity through the selected supply path against the schematic. Then apply power and check for approximately 5 V between the main-board 5 V rail and GND. Battery power can be tested without the XIAO fitted. USB power enters through the XIAO, so first check the female headers for shorts, then insert the XIAO and connect USB. If voltage is present at the source but absent at the main board, check the cap's position, contacts and header joints. This jumper selects the power source; the solder jumpers below separately select the IMU's 3.3 V or 5 V supply.
 
@@ -301,7 +305,11 @@ Disconnect both the battery and USB before moving the cap. For the first check, 
 | 3.3 V | Bridge the two `3V3` pads and leave `5V0` open |
 | 5 V | Bridge the two `5V0` pads and leave `3V3` open |
 
-Use a 0 Ω resistor or a solder bridge as specified by the BOM for your PCB revision. Modules from different manufacturers may use different regulators and pull-up circuits even when they contain the same IMU chip. Check the module's supply and I²C voltage requirements before buying. **Never bridge both pairs or short the `3V3` and `5V0` rails together.**
+Use a 0 Ω resistor or a solder bridge as specified by the BOM for your PCB revision. Modules from different manufacturers may use different regulators and pull-up circuits even when they contain the same IMU chip. Check the module's supply and I²C voltage requirements before buying.
+
+::: danger Bridge only one IMU voltage jumper
+**Never bridge both `3V3` and `5V0` or short the two supply rails together.** After soldering the selected jumper, measure the IMU supply hole relative to GND. Confirm the voltage suits the module before soldering the IMU.
+:::
 
 **After completing the solder jumper:** With power disconnected, check continuity across the selected pair and confirm that the other pair has neither a resistor nor a solder bridge. Before connecting the IMU, verify the supply at the XIAO headers, temporarily insert the XIAO and apply the selected power source. Measure the IMU supply pin relative to GND: it should read approximately 3.3 V or 5 V, as selected. The `3V3` setting uses the XIAO's 3.3 V output, so a missing voltage with the XIAO removed does not by itself indicate a soldering fault. Once the voltage is correct, disconnect all power and remove the XIAO before soldering the IMU.
 
@@ -314,7 +322,11 @@ Use a 0 Ω resistor or a solder bridge as specified by the BOM for your PCB revi
 | `SCL` / `SCL/SCLK` | `SCL/SCLK`, connected to XIAO `GPIO43` | I²C clock |
 | `SDA` / `SDA/SDI` | `SDA/MOSI`, connected to XIAO `GPIO2` | I²C data |
 
-Fit header pins only to these four positions on the illustrated module. Its `VCC` pin must align with the main board's `?V` supply hole. Do not shift it up to the separate `5V` hole, which would bypass the selected IMU supply voltage. `EDA` and `ECL` are auxiliary communication pins, not substitutes for the `SDA` and `SCL` connections used here. Leave the other pins as shown. If using a different module, check its documentation for I²C mode and address settings.
+::: warning Check alignment of the four IMU pins
+Fit header pins only for supply, GND, SCL and SDA on the illustrated module. **Its `VCC` pin must align with the main board's `?V` supply hole, not the separate `5V` hole above it.** Using the `5V` hole would bypass the selected IMU supply voltage. `EDA` and `ECL` are auxiliary communication pins, not substitutes for the `SDA` and `SCL` connections used here.
+:::
+
+Leave the other pins as shown. If using a different module, check its documentation for I²C mode and address settings.
 
 Align the IMU with the board's axis markings. Tack one pin, check that all four pins are in the correct positions, then solder the remaining pins. Secure it rigidly; thick, soft foam can let it move. The standard firmware uses IMU mounting rotation `roll=π`, `pitch=0`, `yaw=π/2`. The matching PCB and illustrated mounting correspond to these settings.
 
@@ -374,7 +386,7 @@ Press the four Ø8 mm motor grommets into the frame slots and check that each ed
 
 <p class="figure-caption">Figure 2-12. Grommets hold the motors and isolate some vibration.</p>
 
-Route the motor wires along the arms and connect M0–M3 one by one. Leave a little slack and keep every cable out of the propeller discs. Do not install the propellers yet.
+Route the motor wires along the arms and connect M0–M3 one by one. Leave a little slack and keep every cable out of the propeller discs. **Do not install the propellers yet.**
 
 ![Four motor cables connected to the controller board](/media/photos/motor-wiring.jpg)
 
@@ -391,6 +403,10 @@ The reference aircraft uses an 18350 1300 mAh battery weighing 25 g. Mount it ne
 If you add a camera or bracket, or change to a pouch battery, reposition the battery to restore horizontal balance. Follow the camera module's requirements for lens direction and ribbon-cable bend radius.
 
 ## 2.6 Checks before fitting propellers {#propellers}
+
+::: warning Remove propellers for motor tests
+**Leave propellers off during flashing, calibration and motor-direction checks.** Verify motor numbering, rotation and the matching CW/CCW propellers, then disconnect power before fitting them.
+:::
 
 The standard voltage-sensing connection is `VBAT_SW → 100 kΩ → GPIO1/A0 → 100 kΩ → GND`. With a 3.70 V battery, the ADC pin should read about 1.85 V. Never connect the battery or 5 V directly to an ESP32-S3 GPIO. Set `PWR_VOLT_PIN=-1` on older boards without the divider. Before power-up, check for supply shorts, verify voltages and ground connections with a multimeter, then fit the controller module.
 
