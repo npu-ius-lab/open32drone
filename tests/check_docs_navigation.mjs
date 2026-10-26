@@ -28,16 +28,13 @@ for (const directory of ['guide', 'reference', 'project']) {
     const html = readFileSync(new URL(`${route}.html`, dist), 'utf8')
     checkIcons(html, route)
     if (route.startsWith('project/changelog')) {
-      const target = 'https://github.com/npu-ius-lab/open32drone/releases'
-      assert(html.includes('http-equiv="refresh"'), `${route}: missing legacy redirect`)
-      assert(html.includes(`content="0;url=${target}"`), `${route}: incorrect redirect destination`)
-      assert(html.includes(`href="${target}"`), `${route}: missing redirect fallback link`)
-      assert(!html.includes('v0.1.'), `${route}: old local version records must not be published`)
-      continue
+      assert(!html.includes('http-equiv="refresh"'), `${route}: changelog must be readable`)
+      assert(html.includes('2026-10-24') && html.includes('2026-09-30'), `${route}: missing update history`)
+      assert(!/href="[^"]*github\.com\/[^\"]*\/commit\//.test(html), `${route}: do not display commit links`)
     }
     const siteTitle = html.match(/<a[^>]*class="title"[^>]*>/)?.[0]
-    assert(siteTitle?.includes(`href="${base}guide/01-project${english ? '.en' : ''}"`),
-      `${route}: site title must open the tutorial in the current language`)
+    assert(siteTitle?.includes(`href="${base}${english ? 'index.en' : ''}"`),
+      `${route}: site title must open the home page in the current language`)
     const topnav = html.match(/<nav[^>]*class="VPNavBarMenu[^\"]*"[\s\S]*?<\/nav>/)?.[0]
     assert(topnav, `${route}: missing top navigation`)
     assert(!html.includes('/project/downloads'), `${route}: link to removed download page`)
@@ -51,7 +48,9 @@ for (const directory of ['guide', 'reference', 'project']) {
       assert.equal(targetEnglish, english, `${route}: top navigation changes language at ${href}`)
     }
     assert(html.includes(english ? 'Search documentation' : '搜索文档'), `${route}: wrong search language`)
-    assert(html.includes(english ? 'On this page' : '本页内容'), `${route}: wrong outline language`)
+    if (!route.startsWith('project/changelog')) {
+      assert(html.includes(english ? 'On this page' : '本页内容'), `${route}: wrong outline language`)
+    }
     for (const [, image] of html.matchAll(/<img[^>]+src="([^"]*\/media\/figures\/[^"]+\.svg)"/g)) {
       assert(image.startsWith(base), `${route}: wrong diagram base ${image}`)
       readFileSync(new URL(image.slice(base.length), dist))
@@ -91,9 +90,8 @@ for (const directory of ['guide', 'reference', 'project']) {
     const sidebar = html.match(/<nav[^>]*id="VPSidebarNav"[\s\S]*?<\/nav>/)?.[0]
     assert(sidebar, `${route}: missing sidebar`)
     const links = [...sidebar.matchAll(/href="([^"]+)"/g)].map(x => x[1])
-    assert.equal(links.length, 10, `${route}: incomplete sidebar`)
-    assert(![...links, ...[...topnav.matchAll(/href="([^"]+)"/g)].map(x => x[1])]
-      .some(href => href.includes('/project/changelog')), `${route}: duplicate changelog navigation`)
+    assert.equal(links.length, 11, `${route}: incomplete sidebar`)
+    assert(links.includes(`${base}project/changelog${english ? '' : '.zh-CN'}`), `${route}: missing changelog`)
     for (const href of links) {
       assert(href.startsWith(base), `${route}: wrong base ${href}`)
       const target = href.slice(base.length)
@@ -114,7 +112,7 @@ for (const directory of ['guide', 'reference', 'project']) {
     checked++
   }
 }
-assert.equal(checked, 20)
+assert.equal(checked, 22)
 for (const suffix of ['', '.zh-CN']) {
   assert(!existsSync(new URL(`project/downloads${suffix}.md`, docs)), 'Download pages must be removed')
   assert(!existsSync(new URL(`project/downloads${suffix}.html`, dist)), 'Build must not retain deleted download pages')
@@ -172,6 +170,7 @@ for (const directory of ['guide', 'reference', 'project']) {
       const url = new URL(href, `https://docs.invalid${base}${directory}/${name}`)
       if (!url.pathname.startsWith(base)) continue
       let target = url.pathname.slice(base.length)
+      if (!target || target.endsWith('/')) target += 'index'
       if (!target.endsWith('.html')) target += '.html'
       const file = new URL(target, dist)
       const id = decodeURIComponent(url.hash.slice(1))
@@ -182,12 +181,35 @@ for (const directory of ['guide', 'reference', 'project']) {
   }
 }
 console.log(`Internal fragments passed: ${fragments}`)
-const home = readFileSync(new URL('index.html', dist), 'utf8')
-checkIcons(home, 'index')
-assert(home.includes('http-equiv="refresh"') && home.includes('content="0;url=./guide/01-project"'),
-  'site root must redirect to the tutorial without JavaScript')
-const homeLinks = [...home.matchAll(/href="([^"]+)"/g)]
-  .map(([, href]) => new URL(href, `https://docs.invalid${base}`).pathname)
-assert(homeLinks.includes(`${base}guide/01-project`), 'site root: missing tutorial fallback link')
-assert(!home.includes('project-hero'), 'site root must not render the removed landing page')
+for (const english of [false, true]) {
+  const route = english ? 'index.en' : 'index'
+  const home = readFileSync(new URL(`${route}.html`, dist), 'utf8')
+  checkIcons(home, route)
+  assert(!home.includes('http-equiv="refresh"'), `${route}: home must not redirect`)
+  assert(home.includes('class="documentation-home"'), `${route}: missing documentation home`)
+  assert(home.includes('id="guide"') && home.includes('id="updates-title"'), `${route}: missing guide or updates`)
+  const sidebarLinks = html => [...(html.match(/<nav[^>]*id="VPSidebarNav"[\s\S]*?<\/nav>/)?.[0] || '').matchAll(/href="([^"]+)"/g)].map(match => match[1])
+  const chapterPage = readFileSync(new URL(`guide/01-project${english ? '.en' : ''}.html`, dist), 'utf8')
+  assert.deepEqual(sidebarLinks(home), sidebarLinks(chapterPage), `${route}: home must share the chapter navigation`)
+  const menu = home.match(/<nav[^>]*id="site-language-options"[\s\S]*?<\/nav>/)?.[0]
+  assert(menu?.includes(`href="${base}"`) && menu.includes(`href="${base}index.en"`), `${route}: incorrect language switch`)
+  const chapters = home.match(/<table[^>]*class="chapter-list"[\s\S]*?<\/table>/)?.[0] || ''
+  const chapterLinks = [...chapters.matchAll(/href="([^"]+)"/g)].map(x => x[1])
+  assert.equal(chapterLinks.length, 6, `${route}: expected six chapter links`)
+  for (const href of chapterLinks) {
+    assert.equal(href.endsWith('.en'), english, `${route}: wrong chapter language`)
+  }
+  for (const [, href] of home.matchAll(/<a\b[^>]*href="([^"]+)"/g)) {
+    if (!href.startsWith(base) || href.startsWith('//')) continue
+    const [path, fragment] = href.slice(base.length).split('#')
+    const target = path || 'index'
+    if (/\.(?:css|js|ico|svg)(?:\?|$)/.test(target)) continue
+    const destination = new URL(target.endsWith('.html') ? target : `${target}.html`, dist)
+    assert(existsSync(destination), `${route}: missing destination ${href}`)
+    if (fragment) assert(readFileSync(destination, 'utf8').includes(`id="${fragment}"`), `${route}: missing anchor ${href}`)
+  }
+  assert(!/href="[^"]*github\.com\/[^\"]*\/commit\//.test(home), `${route}: do not display commit links`)
+  const overview = readFileSync(new URL(`guide/01-project${english ? '.en' : ''}.html`, dist), 'utf8')
+  assert(!overview.includes('home-doc-nav'), `${route}: remove the old overview navigation table`)
+}
 console.log(`Navigation passed: ${checked} documentation pages, same-language sidebars and language switches (${fileURLToPath(dist)}).`)

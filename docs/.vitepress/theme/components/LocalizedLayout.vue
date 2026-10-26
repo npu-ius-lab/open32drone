@@ -9,6 +9,7 @@ import LanguageSwitch from './LanguageSwitch.vue'
 const data = useData()
 const english = computed(() => {
   const path = data.page.value.relativePath
+  if (path === 'index.en.md') return true
   return path.startsWith('guide/') ? path.endsWith('.en.md')
     : /^(reference|project)\//.test(path) && !path.endsWith('.zh-CN.md')
 })
@@ -18,14 +19,16 @@ const theme = computed(() => {
   return {
     ...original,
     nav: [
+      { text: 'Home', link: '/index.en', activeMatch: '^/index\\.en(?:\\.html)?$' },
       { text: 'Tutorial', link: '/guide/01-project.en', activeMatch: '/guide/' },
       { text: 'Reference', activeMatch: '/reference/', items: [
         { text: 'Source and build', link: '/reference/source-build' },
         { text: 'Parameters and interfaces', link: '/reference/firmware' },
       ] },
+      { text: 'Changelog', link: '/project/changelog' },
       { text: 'Downloads', link: 'https://github.com/npu-ius-lab/open32drone/releases' },
     ],
-    logoLink: withBase('/guide/01-project.en'),
+    logoLink: withBase('/index.en'),
     outline: { label: 'On this page', level: [2, 3] },
     search: { ...original.search, options: { ...original.search?.options,
       translations: {

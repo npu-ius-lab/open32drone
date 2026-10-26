@@ -7,7 +7,7 @@ const root = ref<HTMLDetailsElement>()
 const trigger = ref<HTMLElement>()
 const currentEnglish = computed(() => destination.value.lang === 'zh-CN')
 const choices = computed(() => {
-  const current = `/${page.value.relativePath.replace(/\.md$/, '')}`
+  const current = page.value.relativePath === 'index.md' ? '/' : `/${page.value.relativePath.replace(/\.md$/, '')}`
   return [
     { label: '简体中文', lang: 'zh-CN', path: currentEnglish.value ? destination.value.path : current },
     { label: 'English', lang: 'en', path: currentEnglish.value ? current : destination.value.path },
@@ -37,6 +37,11 @@ onUnmounted(() => {
 // Tutorials use .en; reference/project pages use .zh-CN for Chinese.
 const destination = computed(() => {
   const path = page.value.relativePath.replace(/\.md$/, '')
+  if (path === 'index' || path === 'index.en') {
+    return path === 'index.en'
+      ? { path: '/', label: '简体中文', lang: 'zh-CN' }
+      : { path: '/index.en', label: 'English', lang: 'en' }
+  }
   if (path.startsWith('guide/')) {
     return path.endsWith('.en')
       ? { path: `/${path.slice(0, -3)}`, label: '简体中文', lang: 'zh-CN' }

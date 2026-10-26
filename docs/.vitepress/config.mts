@@ -44,6 +44,7 @@ const reference = [
   { text: '参数与接口', link: '/reference/firmware.zh-CN' },
 ]
 const project = [
+  { text: '更新日志', link: '/project/changelog.zh-CN' },
   { text: '参与贡献', link: '/project/contributing.zh-CN' },
   { text: '许可证与来源', link: '/project/third-party.zh-CN' },
 ]
@@ -53,7 +54,7 @@ const referenceEn = reference.map((item, index) => ({
 }))
 const projectEn = [
   ...project.map((item, index) => ({
-    text: ['Contributing', 'Licenses and origins'][index],
+    text: ['Changelog', 'Contributing', 'Licenses and origins'][index],
     link: item.link.replace('.zh-CN', ''),
   })),
 ]
@@ -141,14 +142,18 @@ export default defineConfig({
   },
   themeConfig: {
     siteTitle: 'Open32Drone',
-    logoLink: `${base}guide/01-project`,
+    logoLink: base,
     nav: [
+      { text: '首页', link: '/', activeMatch: '^/(?:index(?:\.html)?)?$' },
       { text: '教程', link: '/guide/01-project', activeMatch: '/guide/' },
       { text: '参考', items: reference, activeMatch: '/reference/' },
+      { text: '更新日志', link: '/project/changelog.zh-CN' },
       { text: '下载', link: `${repositoryUrl}/releases` },
     ],
     socialLinks: [{ icon: 'github', link: repositoryUrl, ariaLabel: 'GitHub' }],
     sidebar: {
+      '/index.md': sidebar(),
+      '/index.en.md': sidebar(true),
       // VitePress matches prefixes of page.relativePath (including .md).
       // Include the extension so an English path cannot shadow its .zh-CN sibling.
       ...Object.fromEntries(guideEn.map(x => [`${x.link}.md`, sidebar(true)])),

@@ -1,19 +1,15 @@
 ---
-layout: false
-search: false
-title: Open32Drone 教程
-head:
-  - - meta
-    - http-equiv: refresh
-      content: 0;url=./guide/01-project
+layout: doc
+aside: false
+prev: false
+next: false
+pageClass: documentation-index
+title: 文档与更新
+description: Open32Drone 制作教程、开发参考和公开仓库更新记录。
 ---
 
 <script setup>
-import { onMounted } from 'vue'
-import { withBase } from 'vitepress'
-
-// Also handle client-side navigation back to the site root.
-onMounted(() => window.location.replace(withBase('/guide/01-project')))
+import DocumentationHome from './.vitepress/theme/components/DocumentationHome.vue'
 </script>
 
-[进入教程 / Open tutorial](./guide/01-project.md)
+<DocumentationHome />

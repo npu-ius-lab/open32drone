@@ -1,19 +1,5 @@
 # 01 · Project overview
 
-## Documentation {#documentation}
-
-<div class="home-doc-nav">
-
-| Category | Documentation and resources |
-|---|---|
-| Build and fly | [Parts and assembly](03-hardware.en.md) · [Firmware and first flight](04-firmware-flight.en.md) · [Tuning and diagnosis](05-tuning.en.md) |
-| Programming and simulation | [ROS 2 control](06-ros.en.md) · [Simulation and reinforcement learning](07-rl.en.md) |
-| Development | [Source and build](../reference/source-build.md) · [Parameters and interfaces](../reference/firmware.md) |
-| Project resources | [Software downloads](https://github.com/npu-ius-lab/open32drone/releases) · [PCB design](https://oshwhub.com/fanchewang/open32drone) · [Frame printing](https://makerworld.com.cn/zh/models/2922108-open32drone-wu-ren-ji-8520kong-xin-bei-ji-jia-ros2#profileId-3425842) |
-| Get involved | [GitHub repository](https://github.com/npu-ius-lab/open32drone) · [Contributing](../project/contributing.md) · [Licenses and origins](../project/third-party.md) |
-
-</div>
-
 ## What is Open32Drone?
 
 Open32Drone is an open-source micro quadrotor for education, research and DIY projects. Print the frame, solder the electronics and assemble an aircraft, then control it with a phone, transmitter or ROS 2.
@@ -41,15 +27,7 @@ Android and ROS 2 connect over Wi-Fi; use one of them at a time. Phone control d
 
 ## Start building
 
-For a first build, follow the stages below. If you have already assembled and flown the aircraft, continue with tuning, ROS 2 or simulation.
-
-| Stage | What you will do |
-|---|---|
-| [02 · Start building](03-hardware.en.md) | Buy parts, print the frame, make the PCB, solder and assemble |
-| [03 · First flight](04-firmware-flight.en.md) | Download the firmware and app, flash, calibrate and fly |
-| [04 · Tuning and diagnosis](05-tuning.en.md) | Check and adjust code and parameters based on flight symptoms |
-| [05 · ROS 2 control](06-ros.en.md) | Connect, read telemetry and program aircraft motion |
-| [06 · Simulation and reinforcement learning](07-rl.en.md) | Run numerical simulations and explore control and policy training |
+Follow the [documentation guide on the home page](../index.en.md#guide) for assembly and first flight.
 
 For ready-to-use software, see [GitHub Releases](https://github.com/npu-ius-lab/open32drone/releases). To modify the code, see [Source and build](../reference/source-build.md).
 
