@@ -9,7 +9,7 @@ import UpdateList from '../.vitepress/theme/components/UpdateList.vue'
 
 # Changelog
 
-Documentation, code and build updates, dated by their commits in the public repository.
+Selected updates to the flight controller, control apps, development tools and documentation.
 
 <UpdateList english />
 

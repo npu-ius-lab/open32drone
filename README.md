@@ -19,6 +19,18 @@ Open32Drone supports MAVLink and ROS, giving developers an affordable platform t
 
 ---
 
+## News
+
+- **2026-10-26** · **Bilingual documentation home**: Find assembly, first-flight, log-based tuning and ROS 2 guides in one place.
+- **2026-09-30** · **ROS 2 keyboard control**: Take off, fly with velocity commands, step between position targets, hold and land.
+- **2026-09-30** · **Flight-controller protection and app emergency-stop confirmation**: Stop motor output on a control-loop timeout and use flight-controller telemetry to confirm emergency-stop results.
+- **2026-09-22** · **Simulation and reinforcement-learning exercises**: Added PD control, log analysis and PPO training examples.
+- **2026-08-30** · **Android controller app**: Connect over Wi-Fi for virtual sticks, takeoff and landing, telemetry and OTA updates.
+
+[Guides and update details](https://npu-ius-lab.github.io/open32drone/project/changelog)
+
+---
+
 ## Core Features
 
 ### ESP32-S3 Flight Control

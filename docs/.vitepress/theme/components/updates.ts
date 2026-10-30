@@ -1,28 +1,34 @@
-// Public main-branch commits; dates are commit dates, not release dates.
+// Selected milestones on public main. Dates are commit dates, not release tags.
+// Keep the README News sections aligned with this list. Minor copy/layout edits
+// are omitted. Evidence uses committed code, including its former software/ path.
 export const updates = [
   {
-    date: '2026-10-24', commit: '913d1db',
-    zh: { title: '新增日志调参教程', items: ['介绍 log dump 导出与 AI 辅助调参，并高亮焊接注意事项。'] },
-    en: { title: 'Added a flight-log tuning guide', items: ['Covers log dump export and AI-assisted tuning, with clearer warnings in the assembly guide.'] },
+    id: 'documentation-home', date: '2026-10-26', commit: '7b0a428',
+    zh: { title: '新增中英文教程首页', items: ['集中查找制作、首飞、日志调参与 ROS 2 开发文档。'] },
+    en: { title: 'Bilingual documentation home', items: ['Find assembly, first-flight, log-based tuning and ROS 2 guides in one place.'] },
   },
   {
-    date: '2026-10-21', commit: '8d19508',
-    zh: { title: '补充供电与 IMU 接线说明', items: ['明确电源跳线帽、电压焊桥和针脚接法，增加逐步焊接检查。'] },
-    en: { title: 'Clarified power and IMU wiring', items: ['Explains power jumpers, voltage selection and pin connections, with checks after each soldering step.'] },
+    // Added in f1c8d8b vs 1d4ebfc: ros2/.../keyboard_teleop.py and keyboard_core.py.
+    id: 'ros2-keyboard', date: '2026-09-30', commit: 'f1c8d8b',
+    zh: { title: '新增 ROS 2 键盘遥控', items: ['支持起飞、速度操控、位置步进、保持和降落。'] },
+    en: { title: 'ROS 2 keyboard control', items: ['Take off, fly with velocity commands, step between position targets, hold and land.'] },
   },
   {
-    date: '2026-10-09', commit: '28750fc',
-    zh: { title: '新增文档导航', items: ['集中列出教程、开发参考、硬件文件和软件下载入口。'] },
-    en: { title: 'Added a documentation directory', items: ['Brings together tutorials, development references, hardware files and software downloads.'] },
+    // Added in f1c8d8b: firmware/loop_watchdog.ino and Android EmergencyStopState.java.
+    id: 'flight-protection', date: '2026-09-30', commit: 'f1c8d8b',
+    zh: { title: '改进飞控保护与 App 急停确认', items: ['主循环超时后停止电机输出，App 根据飞控回传确认急停结果。'] },
+    en: { title: 'Flight-controller protection and app emergency-stop confirmation', items: ['Stop motor output on a control-loop timeout and use flight-controller telemetry to confirm emergency-stop results.'] },
   },
   {
-    date: '2026-09-30', commit: '1a7b155',
-    zh: { title: '修复下载校验兼容问题', items: ['校验脚本现在可读取采用 Windows 换行格式的校验文件。'] },
-    en: { title: 'Fixed checksum file compatibility', items: ['The validation script now accepts checksum files with Windows line endings.'] },
+    // 1d4ebfc adds software/simulation/{course,rl_demo}; absent from c0e6615.
+    id: 'simulation-exercises', date: '2026-09-22', commit: '1d4ebfc',
+    zh: { title: '新增仿真与强化学习练习', items: ['提供 PD 控制、日志分析和 PPO 训练示例。'] },
+    en: { title: 'Simulation and reinforcement-learning exercises', items: ['Added PD control, log analysis and PPO training examples.'] },
   },
   {
-    date: '2026-09-30', commit: 'f1c8d8b',
-    zh: { title: '调整仓库目录，更新中英文教程', items: ['固件、Android、ROS 2、硬件、仿真与文档分目录存放，同步教程图片与下载配置。'] },
-    en: { title: 'Reorganized source files and updated both guides', items: ['Separated firmware, Android, ROS 2, hardware, simulation and docs into folders; updated illustrations and download settings.'] },
+    // c0e6615 adds software/android, including its manual-control and OTA clients.
+    id: 'android-controller', date: '2026-08-30', commit: 'c0e6615',
+    zh: { title: '新增 Android 控制端', items: ['通过 Wi-Fi 使用虚拟摇杆、起降控制、状态查看与 OTA 更新。'] },
+    en: { title: 'Android controller app', items: ['Connect over Wi-Fi for virtual sticks, takeoff and landing, telemetry and OTA updates.'] },
   },
 ]

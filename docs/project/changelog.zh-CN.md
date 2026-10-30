@@ -9,7 +9,7 @@ import UpdateList from '../.vitepress/theme/components/UpdateList.vue'
 
 # 更新日志
 
-项目的文档、代码与构建更新，按公开仓库的提交日期整理。
+记录飞控、控制端、开发工具与教程的重要更新。
 
 <UpdateList />
 

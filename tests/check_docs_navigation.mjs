@@ -29,7 +29,7 @@ for (const directory of ['guide', 'reference', 'project']) {
     checkIcons(html, route)
     if (route.startsWith('project/changelog')) {
       assert(!html.includes('http-equiv="refresh"'), `${route}: changelog must be readable`)
-      assert(html.includes('2026-10-24') && html.includes('2026-09-30'), `${route}: missing update history`)
+      assert(html.includes('2026-10-26') && html.includes('2026-08-30'), `${route}: missing important update history`)
       assert(!/href="[^"]*github\.com\/[^\"]*\/commit\//.test(html), `${route}: do not display commit links`)
     }
     const siteTitle = html.match(/<a[^>]*class="title"[^>]*>/)?.[0]

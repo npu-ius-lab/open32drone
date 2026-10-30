@@ -68,7 +68,7 @@ const suffix = computed(() => props.english ? '' : '.zh-CN')
 
     <section class="home-updates" aria-labelledby="updates-title">
       <div class="updates-heading">
-        <h2 id="updates-title">{{ english ? 'Recent updates' : '近期更新' }}</h2>
+        <h2 id="updates-title">{{ english ? 'News' : '重要更新' }}</h2>
         <a :href="withBase(`/project/changelog${suffix}`)">{{ english ? 'All updates' : '全部更新' }}</a>
       </div>
       <UpdateList :english="english" :limit="3" />
@@ -100,13 +100,6 @@ h2 { margin-top: 32px; padding-top: 24px; font-size: 22px; }
 .updates-heading h2 { border: 0; margin: 0; padding: 0; }
 .updates-heading > a { font-size: 13px; text-decoration: none; }
 .home-updates :deep(.update-list) { padding: 0; margin: 24px 0 0; }
-.home-updates :deep(.update-list > li) { display: grid; grid-template-columns: 92px minmax(0, 1fr); column-gap: 24px; padding: 16px 0; margin: 0; }
-.home-updates :deep(.update-list > li:first-child) { padding-top: 0; }
-.home-updates :deep(.update-list > li:last-child) { border-bottom: 0; padding-bottom: 0; }
-.home-updates :deep(.update-meta) { grid-row: 1 / 3; padding-top: 3px; font-size: 13px; }
-.home-updates :deep(h3) { margin: 0 0 4px; font-size: 15px; line-height: 1.6; }
-.home-updates :deep(ul) { grid-column: 2; margin: 0; padding: 0; font-size: 14px; line-height: 1.8; }
-.home-updates :deep(ul li) { margin: 0; }
 .chapter-list a:hover, .resource-list a:hover { text-decoration: underline; }
 a:focus-visible { outline: 2px solid var(--vp-c-brand-1); outline-offset: 4px; }
 #guide { scroll-margin-top: 90px; }
@@ -116,8 +109,5 @@ a:focus-visible { outline: 2px solid var(--vp-c-brand-1); outline-offset: 4px; }
   .resource-list > div { grid-template-columns: 1fr; }
   .resource-list dt { padding: 8px 12px; }
   .resource-list dd { column-gap: 20px; padding: 10px 12px; }
-  .home-updates :deep(.update-list > li) { grid-template-columns: 1fr; }
-  .home-updates :deep(.update-meta) { grid-row: auto; padding-top: 0; margin-bottom: 6px; }
-  .home-updates :deep(ul) { grid-column: 1; }
 }
 </style>
